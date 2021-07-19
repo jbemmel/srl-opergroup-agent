@@ -1,4 +1,4 @@
-name: bgp-acl-lab
+name: opergroup-lab
 
 topology:
   kinds:
