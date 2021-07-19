@@ -12,6 +12,7 @@ import json
 import signal
 import traceback
 import re
+import sre_yield
 from concurrent.futures import ThreadPoolExecutor
 
 import sdk_service_pb2
@@ -142,6 +143,9 @@ def Gnmi_subscribe_changes(oper_groups):
                  for p in update['update']:
                     path = p['path']
                     logging.info(f"TODO check gNMI change event :: {path}")
+                    for g in oper_groups:
+                        for d in list(sre_yield.AllStrings(g.group)):
+                            logging.info(f"TODO SET gNMI data :: {d}")
               # else: # pygnmi does not provide 'path' for delete events
               # handleDelete(c,m)
 

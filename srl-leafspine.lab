@@ -1,0 +1,31 @@
+name: opergroup-lab2
+
+topology:
+  kinds:
+    srl:
+      # Need IXR D2 or D3 for EVPN/VXLAN support
+      type: ixrd2 # See https://www.nokia.com/networks/products/7250-interconnect-router/
+      # Uses custom container image containing auto-config agent
+      # image: registry.srlinux.dev/pub/srlinux # latest, or srlinux:21.3.1-410
+      image: srl/opergroup-agent:latest
+      license: ../license.key
+    linux:
+      image: frr-with-lldp:latest # Custom built image with lldpad and daemons included
+
+  nodes:
+    leaf1:  { kind: srl, startup-config: spine1.cfg }
+    leaf2:  { kind: srl, startup-config: spine1.cfg }
+    spine1: { kind: srl, startup-config: spine1.cfg }
+
+    h1:
+      kind: linux
+
+    h2:
+      kind: linux
+
+  links:
+    - endpoints: ["leaf1:e1-1","spine1:e1-1"]
+    - endpoints: ["leaf2:e1-1","spine1:e1-2"]
+
+    - endpoints: ["h1:e1-1","leaf1:e1-3"]
+    - endpoints: ["h2:e1-1","leaf2:e1-3"]

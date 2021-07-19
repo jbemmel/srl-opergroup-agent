@@ -13,7 +13,7 @@ RUN printf '%s\n' \
 # Install pyGNMI to /usr/local/lib[64]/python3.6/site-packages
 RUN sudo yum install -y python3-pip gcc-c++ && \
     sudo python3 -m pip install pip --upgrade && \
-    sudo python3 -m pip install pygnmi
+    sudo python3 -m pip install pygnmi sre_yield
 
 # --chown=srlinux:srlinux
 # COPY ./appmgr/ /etc/opt/srlinux/appmgr/ # doesn't stick
