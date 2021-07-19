@@ -1,73 +1,16 @@
-# srl-bgp-acl
-SR Linux agent to auto-create ACLs in response to BGP peers being added/removed
+# srl-opergroup-agent
+SR Linux agent to implement operational groups where target elements are administratively disabled if a monitored link or session goes down
 
-# Prerequisites
-* make
-* [Containerlab](https://containerlab.srlinux.dev/)
+# Use case: uplink monitoring
 
-# Setup
+Monitor operational state of a link:
 ```
-make build
-sudo containerlab deploy -t ./srl-node.lab
+gnmic -a clab-opergroup-lab2-spine1:57400 -u admin -p admin --skip-verify -e json_ietf get --path /interface[name=ethernet-1/1]/oper-state
 ```
-
-# Test
-1. Login to CLI
+The result will be "up" or "down". Accordingly, set admin-state to "enable" or "disable" for all target elements:
 ```
-ssh admin@clab-bgp-acl-lab-spine1
+gnmic -a clab-opergroup-lab2-spine1:57400 -u admin -p admin --skip-verify -e json_ietf set --update-path /interface[name=ethernet-1/2]/admin-state --update-value "disable"
 ```
 
-2. Copy & paste following CLI snippet (or part of it)
-```
-enter candidate
-/network-instance default protocols bgp
-group test
-exit
-neighbor 1.2.3.4
-peer-group test
-admin-state enable
-commit now
-
-# The above creates an ACL entry under /acl cpm-filter ipv4-filter
-
-enter candidate
-exit
-delete neighbor 1.2.3.4
-commit now
-```
-
-For IPv6:
-```
-enter candidate 
-/network-instance default protocols bgp
-neighbor 2001::1.2.3.4
-peer-group test
-admin-state enable
-commit now
-
-# The above creates an ACL entry under /acl cpm-filter ipv6-filter
-
-enter candidate
-exit
-delete neighbor 2001::1.2.3.4
-commit now
-```
-
-To look at logs:
-```
-docker exec clab-bgp-acl-lab-spine1 cat /var/log/srlinux/stdout/bgp_acl_agent.log
-```
-
-## Implementation notes
-The code registers with the SR Linux NDK to allow for (simple) configuration of the base sequence number of dynamically created ACL entries.
-In parallel, it connects through gNMI to the local system using a unix socket (assuming default username/password, hardcoded).
-
-The gNMI subscription is targeted at /network-instance[name=\*]/protocols/bgp/neighbor[peer-address=\*], which receives more events than strictly needed.
-Events are filtered and only the base event is used to create an ACL entry. Similarly, 'delete' removes the ACL entry
-
-ACL entries are created dynamically, by looking up existing entries and creating a new entry using the next available sequence number (starting from configured base).
-It is assumed a 'drop all' entry exists at sequence number 65535
-
-## Open issues
-* There is a (configurable) connection rate limit on the gNMI interface; a large configuration with many existing BGP peers may exceed it during startup with the current approach of opening a new connection for each request
-
+Similarly, a BGP session can be monitored or disabled. Generator expressions can be used to enumerate multiple targets (expanded to multiple gNMI SET commands):
+/interface[name=ethernet-1/{2,3,4,5-7}]/admin-state
