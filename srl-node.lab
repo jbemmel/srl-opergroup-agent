@@ -3,7 +3,7 @@ name: bgp-acl-lab
 topology:
   kinds:
     srl:
-      image: srl/bgp-acl:latest
+      image: srl/opergroup-agent:latest
       license: ../license.key
 
   nodes:
