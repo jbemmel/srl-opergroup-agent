@@ -1,0 +1,45 @@
+module opergroup-agent {
+
+    yang-version "1";
+
+    // namespace
+    namespace "urn:srl_test/opergroup-agent";
+
+    prefix "opergroup_agent";
+
+    revision "2021-06-28" {
+        description "Initial revision";
+        reference "TBD";
+    }
+
+    grouping opergroup-agent-top {
+        description "Top level grouping for OperGroup agent app";
+
+        container opergroup-agent {
+            presence "presence container";
+            description "Top level enclosing container for opergroup app
+                         config and operational state data";
+
+
+            list oper-group {
+              key name;
+
+              leaf name {
+                type string;
+                description "Unique name for this fate-sharing operational group";
+              }
+              leaf monitor {
+                type string;
+                description "gNMI path to monitor for changes";
+              }
+              leaf group {
+                type string;
+                description "gNMI path expression to apply the same changes";
+              }
+            }
+        }
+    }
+
+    // data definition statements
+    uses opergroup-agent-top;
+}
