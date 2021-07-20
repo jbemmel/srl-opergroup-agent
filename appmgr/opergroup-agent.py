@@ -7,7 +7,6 @@ import sys
 import logging
 import socket
 import os
-from ipaddress import ip_network, ip_address, IPv4Address
 import json
 import signal
 import traceback
@@ -18,6 +17,10 @@ from concurrent.futures import ThreadPoolExecutor
 import sdk_service_pb2
 import sdk_service_pb2_grpc
 import config_service_pb2
+
+# To report state back
+import telemetry_service_pb2
+import telemetry_service_pb2_grpc
 
 from pygnmi.client import gNMIclient, telemetryParser
 
@@ -66,6 +69,30 @@ def Subscribe_Notifications(stream_id):
 
     # Subscribe to config changes, first
     Subscribe(stream_id, 'cfg')
+
+############################################################
+## Function to populate state of agent config
+## using telemetry -- add/update info from state
+############################################################
+def Add_Telemetry(js_path, js_data):
+    telemetry_stub = telemetry_service_pb2_grpc.SdkMgrTelemetryServiceStub(channel)
+    telemetry_update_request = telemetry_service_pb2.TelemetryUpdateRequest()
+    telemetry_info = telemetry_update_request.state.add()
+    telemetry_info.key.js_path = js_path
+    telemetry_info.data.json_content = js_data
+    logging.info(f"Telemetry_Update_Request :: {telemetry_update_request}")
+    telemetry_response = telemetry_stub.TelemetryAddOrUpdate(request=telemetry_update_request, metadata=metadata)
+    return telemetry_response
+
+############################################################
+## Function to populate state fields of the agent
+## It updates command: info from state auto-config-agent
+############################################################
+def Update_OperGroup_State(groupname,val):
+    js_path = '.' + agent_name + '.oper_group{.name=="' + groupname + '"}'
+    value = { "current_state" : { "value": val } }
+    response = Add_Telemetry( js_path=js_path, js_data=json.dumps(value) )
+    logging.info(f"Telemetry_Update_Response :: {response}")
 
 ##################################################################
 ## Proc to process the config Notifications received by auto_config_agent
@@ -146,11 +173,20 @@ def Gnmi_subscribe_changes(oper_groups):
               update = parsed['update']
               if update['update']:
                  for p in update['update']:
-                    path = p['path']
+                    path = '/' + p['path'] # pygnmi strips first /
                     logging.info(f"TODO check gNMI change event :: {path}")
                     for g in oper_groups:
+                      if g['monitor']['value'] == path:
+                        Update_OperGroup_State( g['name'], path + ' = ' + p['val'] )
                         for d in list(sre_yield.AllStrings(g['group']['value'])):
-                            logging.info(f"TODO SET gNMI data and update current_state:: {d}")
+                            logging.info(f"SET gNMI data and update current_state:: {d}")
+                            ps = d.split('/')
+                            root = '/'.join( ps[:-1] )
+                            leaf = ps[-1]
+                            val = {
+                              leaf: "enable" if p['val']=="up" else "disable"
+                            }
+                            c.set( encoding='json_ietf', update=[(root,val)] )
               # else: # pygnmi does not provide 'path' for delete events
               # handleDelete(c,m)
 
