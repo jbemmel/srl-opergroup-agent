@@ -46,7 +46,8 @@ def Subscribe(stream_id, option):
     op = sdk_service_pb2.NotificationRegisterRequest.AddSubscription
     if option == 'cfg':
         entry = config_service_pb2.ConfigSubscriptionRequest()
-        entry.key.js_path = '.' + agent_name # filter out .commit.end notifications
+        # entry.key.js_path = '.' + agent_name + ".*" # filter out .commit.end notifications
+        # entry.key.js_path = ".opergroup_agent.oper_group"
         request = sdk_service_pb2.NotificationRegisterRequest(op=op, stream_id=stream_id, config=entry)
 
     subscription_response = stub.NotificationRegister(request=request, metadata=metadata)
@@ -70,7 +71,7 @@ def Subscribe_Notifications(stream_id):
 ## Proc to process the config Notifications received by auto_config_agent
 ## At present processing config from js_path = .fib-agent
 ##################################################################
-def Handle_Notification(obj):
+def Handle_Notification(obj,groups):
     if obj.HasField('config'):
         logging.info(f"GOT CONFIG :: {obj.config.key.js_path}")
         if agent_name in obj.config.key.js_path:
@@ -85,15 +86,18 @@ def Handle_Notification(obj):
             else:
                 json_acceptable_string = obj.config.data.json.replace("'", "\"")
                 data = json.loads(json_acceptable_string)
-                if 'oper-group' in data:
-                    oper_groups = data['oper_group']
-                    logging.info(f"Got operational group(s) :: {oper_groups}")
-
-                    executor = ThreadPoolExecutor(max_workers=1)
-                    executor.submit(Gnmi_subscribe_changes,oper_groups)
+                if 'oper_group' in data:
+                    oper_group = data['oper_group']
+                    oper_group['name'] = obj.config.key.keys[0]
+                    logging.info(f"Got operational group :: {oper_group}")
+                    groups.append( oper_group )
 
                 return True
-
+        elif obj.config.key.js_path == ".commit.end" and groups!=[]:
+            logging.info(f"Got commit, starting monitoring thread: {groups}")
+            executor = ThreadPoolExecutor(max_workers=1)
+            executor.submit(Gnmi_subscribe_changes,groups)
+            # Gnmi_subscribe_changes( groups )
     else:
         logging.info(f"Unexpected notification : {obj}")
 
@@ -114,7 +118,7 @@ def Gnmi_subscribe_changes(oper_groups):
     subscribe = {
             'subscription': [
                 {
-                    'path': g.monitor,
+                    'path': g['monitor']['value'],
                     'mode': 'on_change',
                     # 'heartbeat_interval': 10 * 1000000000 # ns between, i.e. 10s
                     # Mode 'sample' results in polling
@@ -126,6 +130,7 @@ def Gnmi_subscribe_changes(oper_groups):
             'mode': 'stream',
             'encoding': 'json'
         }
+    logging.info(f"gNMI subscribe :: {subscribe}")
 
     # with Namespace('/var/run/netns/srbase-mgmt', 'net'):
     with gNMIclient(target=('unix:///opt/srlinux/var/run/sr_gnmi_server',57400),
@@ -144,8 +149,8 @@ def Gnmi_subscribe_changes(oper_groups):
                     path = p['path']
                     logging.info(f"TODO check gNMI change event :: {path}")
                     for g in oper_groups:
-                        for d in list(sre_yield.AllStrings(g.group)):
-                            logging.info(f"TODO SET gNMI data :: {d}")
+                        for d in list(sre_yield.AllStrings(g['group']['value'])):
+                            logging.info(f"TODO SET gNMI data and update current_state:: {d}")
               # else: # pygnmi does not provide 'path' for delete events
               # handleDelete(c,m)
 
@@ -182,12 +187,14 @@ def Run():
 
     stream_request = sdk_service_pb2.NotificationStreamRequest(stream_id=stream_id)
     stream_response = sub_stub.NotificationStream(stream_request, metadata=metadata)
-
+    monitoring_groups = []
     try:
         for r in stream_response:
             logging.info(f"NOTIFICATION:: \n{r.notification}")
             for obj in r.notification:
-                Handle_Notification(obj)
+                Handle_Notification(obj,monitoring_groups)
+            # TODO clear after every batch?
+            # monitoring_groups = []
 
     except grpc._channel._Rendezvous as err:
         logging.info(f'GOING TO EXIT NOW: {err}')

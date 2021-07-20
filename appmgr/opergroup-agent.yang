@@ -32,6 +32,11 @@ module opergroup-agent {
                 type string;
                 description "gNMI path to monitor for changes";
               }
+              leaf current-state {
+                type string;
+                description "Current value of monitored operational gNMI state";
+                config false;
+              }
               leaf group {
                 type string;
                 description "gNMI path expression to apply the same changes";
