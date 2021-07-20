@@ -13,4 +13,4 @@ gnmic -a clab-opergroup-lab2-spine1:57400 -u admin -p admin --skip-verify -e jso
 ```
 
 Similarly, a BGP session can be monitored or disabled. Generator expressions can be used to enumerate multiple targets (expanded to multiple gNMI SET commands):
-/interface[name=ethernet-1/{2,3,4,5-7}]/admin-state
+/interface[name=ethernet-1/(2|4|5-7)]/admin-state
