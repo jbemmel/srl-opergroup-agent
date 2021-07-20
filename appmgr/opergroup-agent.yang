@@ -37,6 +37,16 @@ module opergroup-agent {
                 description "Current value of monitored operational gNMI state";
                 config false;
               }
+              leaf last-change {
+                type string;
+                description "Timestamp of last state change";
+                config false;
+              }
+              leaf target-count {
+                type uint16;
+                description "Number of affected objects (e.g. links)";
+                config false;
+              }
               leaf group {
                 type string;
                 description "gNMI path expression to apply the same changes";

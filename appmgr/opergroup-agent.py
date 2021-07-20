@@ -2,7 +2,7 @@
 # coding=utf-8
 
 import grpc
-import datetime
+from datetime import datetime
 import sys
 import logging
 import socket
@@ -88,9 +88,12 @@ def Add_Telemetry(js_path, js_data):
 ## Function to populate state fields of the agent
 ## It updates command: info from state auto-config-agent
 ############################################################
-def Update_OperGroup_State(groupname,val):
+def Update_OperGroup_State(groupname,ts_ns,val,target_count):
     js_path = '.' + agent_name + '.oper_group{.name=="' + groupname + '"}'
-    value = { "current_state" : { "value": val } }
+    _ts = datetime.fromtimestamp(ts_ns/1000000000) # ns -> seconds
+    value = { "current_state" : { "value": val },
+              "last_change" : { "value": _ts.strftime("%Y-%m-%d %H:%M:%S UTC") },
+              "target_count": target_count }
     response = Add_Telemetry( js_path=js_path, js_data=json.dumps(value) )
     logging.info(f"Telemetry_Update_Response :: {response}")
 
@@ -167,25 +170,28 @@ def Gnmi_subscribe_changes(oper_groups):
       for m in telemetry_stream:
         try:
           if m.HasField('update'): # both update and delete events
-              # Filter out only toplevel events
               parsed = telemetryParser(m)
               logging.info(f"gNMI change event :: {parsed}")
               update = parsed['update']
               if update['update']:
                  for p in update['update']:
                     path = '/' + p['path'] # pygnmi strips first /
-                    logging.info(f"TODO check gNMI change event :: {path}")
+                    path_x = path.replace('[','(').replace(']',')')
+                    logging.info(f"Check gNMI change event :: {path}")
                     for g in oper_groups:
                       if g['monitor']['value'] == path:
-                        Update_OperGroup_State( g['name'], path + ' = ' + p['val'] )
-                        for d in list(sre_yield.AllStrings(g['group']['value'])):
-                            logging.info(f"SET gNMI data and update current_state:: {d}")
+                        targets = list(sre_yield.AllStrings(g['group']['value']))
+                        Update_OperGroup_State( g['name'], update['timestamp'],
+                            path + ' = ' + p['val'], len(targets) )
+                        for d in targets:
                             ps = d.split('/')
                             root = '/'.join( ps[:-1] )
-                            leaf = ps[-1]
+                            leaf = ps[-1].replace('-','_')
                             val = {
-                              leaf: "enable" if p['val']=="up" else "disable"
+                              leaf: "enable" if p['val']=="up" else "disable",
+                              "description": f"Controlled by oper-group {g['name']}:{path_x}={p['val']}"
                             }
+                            logging.info(f"SET gNMI data :: {root}={val}")
                             c.set( encoding='json_ietf', update=[(root,val)] )
               # else: # pygnmi does not provide 'path' for delete events
               # handleDelete(c,m)
@@ -279,7 +285,7 @@ if __name__ == '__main__':
                         datefmt='%H:%M:%S', level=logging.INFO)
     handler = RotatingFileHandler(log_filename, maxBytes=3000000,backupCount=5)
     logging.getLogger().addHandler(handler)
-    logging.info("START TIME :: {}".format(datetime.datetime.now()))
+    logging.info("START TIME :: {}".format(datetime.now()))
     if Run():
         logging.info('Agent unregistered')
     else:
