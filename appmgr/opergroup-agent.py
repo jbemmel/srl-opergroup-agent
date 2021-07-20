@@ -88,12 +88,13 @@ def Add_Telemetry(js_path, js_data):
 ## Function to populate state fields of the agent
 ## It updates command: info from state auto-config-agent
 ############################################################
-def Update_OperGroup_State(groupname,ts_ns,val,target_count):
+def Update_OperGroup_State(groupname,ts_ns,val,targets):
     js_path = '.' + agent_name + '.oper_group{.name=="' + groupname + '"}'
     _ts = datetime.fromtimestamp(ts_ns/1000000000) # ns -> seconds
     value = { "current_state" : { "value": val },
               "last_change" : { "value": _ts.strftime("%Y-%m-%d %H:%M:%S UTC") },
-              "target_count": target_count }
+              "targets": { "value": ','.join(targets) },
+              "target_count": len(targets) }
     response = Add_Telemetry( js_path=js_path, js_data=json.dumps(value) )
     logging.info(f"Telemetry_Update_Response :: {response}")
 
@@ -182,11 +183,11 @@ def Gnmi_subscribe_changes(oper_groups):
                       if g['monitor']['value'] == path:
                         targets = list(sre_yield.AllStrings(g['group']['value']))
                         Update_OperGroup_State( g['name'], update['timestamp'],
-                            path + ' = ' + p['val'], len(targets) )
+                            path + ' = ' + p['val'], targets )
                         for d in targets:
                             ps = d.split('/')
                             root = '/'.join( ps[:-1] )
-                            leaf = ps[-1].replace('-','_')
+                            leaf = ps[-1]
                             val = {
                               leaf: "enable" if p['val']=="up" else "disable",
                               "description": f"Controlled by oper-group {g['name']}:{path_x}={p['val']}"

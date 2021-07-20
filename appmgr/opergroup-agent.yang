@@ -47,6 +47,11 @@ module opergroup-agent {
                 description "Number of affected objects (e.g. links)";
                 config false;
               }
+              leaf targets {  // tried leaf-list, hard to populate
+                type string;
+                description "gNMI target paths affected";
+                config false;
+              }
               leaf group {
                 type string;
                 description "gNMI path expression to apply the same changes";
