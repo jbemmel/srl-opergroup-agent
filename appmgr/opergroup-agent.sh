@@ -35,9 +35,9 @@ function main()
     export https_proxy=""
     export no_proxy=""
 
-    # [[ ! -f /var/run/netns/srbase-mgmt ]] && sleep 10
+    # [[ ! -f /var/run/netns/srbase-mgmt ]] && sleep 10 && exit -1
     # /usr/sbin/ip netns exec srbase-mgmt python3 ${main_module} &
-    # Now using Unix socket to connect locally
+    # Now using Unix socket to connect locally => session issues?
     python3 ${main_module} &
 
     child=$!

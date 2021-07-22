@@ -5,6 +5,14 @@ topology:
     srl:
       image: srl/opergroup-agent:latest
       license: ../license.key
+      # Subdirectory of config -> clab must manage this
+      # binds:
+      # - appmgr:/etc/opt/srlinux/appmgr:ro
 
   nodes:
-    spine1: { kind: srl, startup-config: spine1.cfg }
+    spine1:
+      kind: srl
+      startup-config: spine1.cfg
+      # Can make SDK Unix socket available on host, requires user with uid 1002
+      # binds:
+      # - /tmp/spine1:/opt/srlinux/var/run

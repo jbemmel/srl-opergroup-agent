@@ -12,6 +12,7 @@ endif
 
 build:
 	sudo docker build --build-arg SRL_AUTO_CONFIG_RELEASE=${TAG} \
+	 --build-arg SSH_KEY="$(cat ~/.ssh/id_rsa.pub)" \
 	 --build-arg http_proxy=${HTTP_PROXY} --build-arg https_proxy=${HTTP_PROXY} \
 	 --build-arg SR_LINUX_RELEASE="${SR_LINUX_RELEASE}" -f Dockerfile -t ${IMG} .
 	sudo docker tag ${IMG} ${LATEST}

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # coding=utf-8
 
 import grpc
@@ -13,6 +13,22 @@ import traceback
 import re
 import sre_yield
 from concurrent.futures import ThreadPoolExecutor
+
+if 'SRL_IS_INTERACTIVE' in os.environ: # running on SR Linux box?
+   SDK_SERVER='unix:///opt/srlinux/var/run/sr_sdk_service_manager'
+   GNMI_SERVER='unix:///opt/srlinux/var/run/sr_gnmi_server'
+   LOG_PATH='/var/log/srlinux/stdout'
+else:
+   # to get SDK: docker cp clab-opergroup-lab2-spine1:/usr/lib/python3.6/site-packages/sdk_protos/ .
+   # or using sshfs: sudo sshfs -o allow_other,default_permissions,IdentityFile=/home/jeroen/.ssh/id_rsa.pub  \
+   #    admin@clab-opergroup-lab2-spine1:/usr/lib/python3.6/site-packages/sdk_protos /mnt/sdk_protos
+   sys.path.append('/home/jeroen/srlinux/python/virtual-env/lib/python3.6/site-packages/sdk_protos')
+
+   # This requires the SDK Unix socket to be exposed on the host
+   # useradd -m --uid 1002 -s /bin/bash srlinux (for permissions)
+   # SDK_SERVER='unix:///tmp/spine1/sr_sdk_service_manager:50053='
+   SDK_SERVER=GNMI_SERVER='clab-opergroup-lab-spine1'
+   LOG_PATH='/tmp/srlinux_log'
 
 import sdk_service_pb2
 import sdk_service_pb2_grpc
@@ -35,7 +51,8 @@ agent_name='opergroup_agent'
 ## Open a GRPC channel to connect to sdk_mgr on the dut
 ## sdk_mgr will be listening on 50053
 ############################################################
-channel = grpc.insecure_channel('unix:///opt/srlinux/var/run/sr_sdk_service_manager:50053')
+channel = grpc.insecure_channel( f'{SDK_SERVER}:50053' )
+
 # channel = grpc.insecure_channel('127.0.0.1:50053')
 metadata = [('agent_name', agent_name)]
 stub = sdk_service_pb2_grpc.SdkMgrServiceStub(channel)
@@ -151,23 +168,21 @@ def Gnmi_subscribe_changes(oper_groups):
                 {
                     'path': g['monitor']['value'],
                     'mode': 'on_change',
-                    # 'heartbeat_interval': 10 * 1000000000 # ns between, i.e. 10s
-                    # Mode 'sample' results in polling
-                    # 'mode': 'sample',
-                    # 'sample_interval': 10 * 1000000000 # ns between samples, i.e. 10s
                 } for g in oper_groups
             ],
-            'use_aliases': False,
+            'use_aliases': False, # Could send groupnames as aliases
             'mode': 'stream',
             'encoding': 'json'
         }
     logging.info(f"gNMI subscribe :: {subscribe}")
 
     # with Namespace('/var/run/netns/srbase-mgmt', 'net'):
-    with gNMIclient(target=('unix:///opt/srlinux/var/run/sr_gnmi_server',57400),
+    with gNMIclient(target=(GNMI_SERVER,57400),
+    # Need to run in mgmt namespace for this
+    # with gNMIclient(target=('127.0.0.1',57400),
                             username="admin",password="admin",
                             insecure=True) as c:
-      telemetry_stream = c.subscribe(subscribe=subscribe)
+      telemetry_stream = c.subscribe(subscribe=subscribe) # OR aliases=[]
       for m in telemetry_stream:
         try:
           if m.HasField('update'): # both update and delete events
@@ -180,10 +195,12 @@ def Gnmi_subscribe_changes(oper_groups):
                     path_x = path.replace('[','(').replace(']',')')
                     logging.info(f"Check gNMI change event :: {path}")
                     for g in oper_groups:
+                      # TODO match on alias
                       if g['monitor']['value'] == path:
                         targets = list(sre_yield.AllStrings(g['group']['value']))
                         Update_OperGroup_State( g['name'], update['timestamp'],
                             path + ' = ' + p['val'], targets )
+                        updates = []
                         for d in targets:
                             ps = d.split('/')
                             root = '/'.join( ps[:-1] )
@@ -193,7 +210,13 @@ def Gnmi_subscribe_changes(oper_groups):
                               "description": f"Controlled by oper-group {g['name']}:{path_x}={p['val']}"
                             }
                             logging.info(f"SET gNMI data :: {root}={val}")
-                            c.set( encoding='json_ietf', update=[(root,val)] )
+                            updates.append( (root,val) )
+
+                        # Need a 2nd temporary gNMI session for the SET request
+                        with gNMIclient(target=(GNMI_SERVER,57400),
+                                                username="jvb",password="admin",
+                                                insecure=True) as c2:
+                           c2.set( encoding='json_ietf', update=updates )
               # else: # pygnmi does not provide 'path' for delete events
               # handleDelete(c,m)
 
@@ -276,17 +299,16 @@ def Exit_Gracefully(signum, frame):
 ##################################################################################################
 if __name__ == '__main__':
     # hostname = socket.gethostname()
-    stdout_dir = '/var/log/srlinux/stdout' # PyTEnv.SRL_STDOUT_DIR
     signal.signal(signal.SIGTERM, Exit_Gracefully)
-    if not os.path.exists(stdout_dir):
-        os.makedirs(stdout_dir, exist_ok=True)
-    log_filename = f'{stdout_dir}/{agent_name}.log'
+    if not os.path.exists(LOG_PATH):
+        os.makedirs(LOG_PATH, exist_ok=True)
+    log_filename = f'{LOG_PATH}/{agent_name}.log'
     logging.basicConfig(filename=log_filename, filemode='a',\
                         format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',\
                         datefmt='%H:%M:%S', level=logging.INFO)
     handler = RotatingFileHandler(log_filename, maxBytes=3000000,backupCount=5)
     logging.getLogger().addHandler(handler)
-    logging.info("START TIME :: {}".format(datetime.now()))
+    logging.info( f"Starting agent env={os.environ}" )
     if Run():
         logging.info('Agent unregistered')
     else:
