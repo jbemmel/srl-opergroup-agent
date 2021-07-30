@@ -218,14 +218,16 @@ def Gnmi_subscribe_changes(oper_groups):
                         #                        username="admin",password="admin",
                         #                        insecure=True) as c2:
                         try:
-                           c.set( encoding='json_ietf', update=updates )
-                        except grpc.RpcError as e:
-                           logging.error(e)
+                            c.set( encoding='json_ietf', update=updates )
+                        except Exception as rpc_e:
+                           logging.error(rpc_e)
+                           _o = rpc_e.__context__ # pygnmi wraps this
                            # May happen during system startup, retry once
-                           if e.code() == grpc.StatusCode.FAILED_PRECONDITION:
+                           if _o.code() == grpc.StatusCode.FAILED_PRECONDITION:
                                logging.info("Exception during startup? Retry in 5s...")
                                time.sleep( 5 )
                                c.set( encoding='json_ietf', update=updates )
+                               logging.info("OK, success")
 
         except Exception as e:
           traceback_str = ''.join(traceback.format_tb(e.__traceback__))
