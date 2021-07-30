@@ -152,17 +152,6 @@ def Handle_Notification(obj,groups):
 
     return False
 
-
-##################################################################################################
-## This functions get the app_id from idb for a given app_name
-##################################################################################################
-def get_app_id(app_name):
-    logging.info(f'Metadata {metadata} ')
-    appId_req = sdk_service_pb2.AppIdRequest(name=app_name)
-    app_id_response=stub.GetAppId(request=appId_req, metadata=metadata)
-    logging.info(f'app_id_response {app_id_response.status} {app_id_response.id} ')
-    return app_id_response.id
-
 def Gnmi_subscribe_changes(oper_groups):
     subscribe = {
             'subscription': [
@@ -245,13 +234,6 @@ def Run():
 
     response = stub.AgentRegister(request=sdk_service_pb2.AgentRegistrationRequest(), metadata=metadata)
     logging.info(f"Registration response : {response.status}")
-
-    app_id = get_app_id(agent_name)
-    if not app_id:
-        logging.error(f'idb does not have the appId for {agent_name} : {app_id}')
-        sys.exit(-1)
-    else:
-        logging.info(f'Got appId {app_id} for {agent_name}')
 
     request=sdk_service_pb2.NotificationRegisterRequest(op=sdk_service_pb2.NotificationRegisterRequest.Create)
     create_subscription_response = stub.NotificationRegister(request=request, metadata=metadata)
