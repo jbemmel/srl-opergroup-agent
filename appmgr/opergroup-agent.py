@@ -2,6 +2,7 @@
 # coding=utf-8
 
 import grpc
+import time
 from datetime import datetime
 import sys
 import logging
@@ -212,17 +213,23 @@ def Gnmi_subscribe_changes(oper_groups):
                             logging.info(f"SET gNMI data :: {root}={val}")
                             updates.append( (root,val) )
 
-                        # Need a 2nd temporary gNMI session for the SET request
-                        with gNMIclient(target=(GNMI_SERVER,57400),
-                                                username="jvb",password="admin",
-                                                insecure=True) as c2:
-                           c2.set( encoding='json_ietf', update=updates )
-              # else: # pygnmi does not provide 'path' for delete events
-              # handleDelete(c,m)
+                        # Need a 2nd temporary gNMI session for the SET request?
+                        #with gNMIclient(target=(GNMI_SERVER,57400),
+                        #                        username="admin",password="admin",
+                        #                        insecure=True) as c2:
+                        try:
+                           c.set( encoding='json_ietf', update=updates )
+                        except grpc.RpcError as e:
+                           logging.error(e)
+                           # May happen during system startup, retry once
+                           if e.code() == grpc.StatusCode.FAILED_PRECONDITION:
+                               logging.info("Exception during startup? Retry in 5s...")
+                               time.sleep( 5 )
+                               c.set( encoding='json_ietf', update=updates )
 
         except Exception as e:
           traceback_str = ''.join(traceback.format_tb(e.__traceback__))
-          logging.error(f'Exception caught in gNMI :: {e} m={m} stack:{traceback_str}')
+          logging.error(f'Exception caught in gNMI :: {e} m={m} stack:{traceback_str} type:{type(e)}')
     logging.info("Leaving gNMI event loop")
 
 ##################################################################################################
