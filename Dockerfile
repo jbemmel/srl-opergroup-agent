@@ -1,5 +1,6 @@
 ARG SR_LINUX_RELEASE
-FROM registry.srlinux.dev/pub/srlinux:$SR_LINUX_RELEASE
+FROM ghcr.io/nokia/srlinux:$SR_LINUX_RELEASE
+# FROM registry.srlinux.dev/pub/srlinux:$SR_LINUX_RELEASE
 
 RUN printf '%s\n' \
   '#!/bin/bash' \
