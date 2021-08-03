@@ -32,9 +32,14 @@ module opergroup-agent {
                 type string;
                 description "gNMI path to monitor for changes";
               }
-              leaf current-state {
+              leaf current-states {
                 type string;
-                description "Current value of monitored operational gNMI state";
+                description "Current value of monitored operational gNMI state(s)";
+                config false;
+              }
+              leaf group-is-up {
+                type boolean;
+                description "Combined group state as per threshold";
                 config false;
               }
               leaf last-change {
@@ -55,6 +60,18 @@ module opergroup-agent {
               leaf group {
                 type string;
                 description "gNMI path expression to apply the same changes";
+              }
+              leaf threshold {
+                description "Trigger condition; default 'any' links down";
+                type enumeration {
+                  enum any;
+                  enum all;
+                  enum "1";
+                  enum "2";
+                  enum "3";
+                  enum "4";
+                }
+                default any;
               }
             }
         }

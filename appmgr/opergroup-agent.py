@@ -106,13 +106,13 @@ def Add_Telemetry(js_path, js_data):
 ## Function to populate state fields of the agent
 ## It updates command: info from state auto-config-agent
 ############################################################
-def Update_OperGroup_State(groupname,ts_ns,val,targets):
+def Update_OperGroup_State(groupname,timestamp,val,targets,is_up):
     js_path = '.' + agent_name + '.oper_group{.name=="' + groupname + '"}'
-    _ts = datetime.fromtimestamp(ts_ns/1000000000) # ns -> seconds
-    value = { "current_state" : { "value": val },
-              "last_change" : { "value": _ts.strftime("%Y-%m-%d %H:%M:%S UTC") },
+    value = { "current_states" : { "value": val },
+              "last_change" : { "value": timestamp },
               "targets": { "value": ','.join(targets) },
-              "target_count": len(targets) }
+              "target_count": len(targets),
+              "group_is_up": is_up }
     response = Add_Telemetry( js_path=js_path, js_data=json.dumps(value) )
     logging.info(f"Telemetry_Update_Response :: {response}")
 
@@ -153,22 +153,26 @@ def Handle_Notification(obj,groups):
     return False
 
 def Gnmi_subscribe_changes(oper_groups):
+    logging.info(f"Gnmi_subscribe_changes :: {oper_groups}")
+
     # Assumes group names are unique, could be enforced in YAML model
-    aliases = [ (path,f"#{g['name']}_{i}") for g in oper_groups
-                for (i,path) in enumerate(list(sre_yield.AllStrings(g['monitor']['value'])))  ]
+    # aliases = [ (path,f"#{g['name']}_{i}") for g in oper_groups
+    #            for (i,path) in enumerate(list(sre_yield.AllStrings(g['monitor']['value'])))  ]
+    monitor_map = { path:g for g in oper_groups
+                    for path in list(sre_yield.AllStrings(g['monitor']['value']))  }
+    # Could expand g['targets'] = list(sre_yield.AllStrings(g['group']['value']))
     subscribe = {
             'subscription': [
                 {
                     'path': path,
                     'mode': 'on_change',
-                } for g in oper_groups
-                  for path in list(sre_yield.AllStrings(g['monitor']['value']))
+                } for path in monitor_map.keys()
             ],
-            'use_aliases': True,
+            'use_aliases': False, # not supported?
             'mode': 'stream',
             'encoding': 'json'
         }
-    logging.info(f"gNMI subscribe :: {subscribe} aliases={aliases}")
+    logging.info(f"gNMI subscribe :: {subscribe}")
 
     # with Namespace('/var/run/netns/srbase-mgmt', 'net'):
     with gNMIclient(target=(GNMI_SERVER,57400),
@@ -176,7 +180,7 @@ def Gnmi_subscribe_changes(oper_groups):
     # with gNMIclient(target=('127.0.0.1',57400),
                             username="admin",password="admin",
                             insecure=True) as c:
-      c.subscribe(aliases=aliases)
+      # c.subscribe(aliases=aliases) not supported?
       telemetry_stream = c.subscribe(subscribe=subscribe)
       for m in telemetry_stream:
         try:
@@ -187,41 +191,57 @@ def Gnmi_subscribe_changes(oper_groups):
               if update['update']:
                  for p in update['update']:
                     path = '/' + p['path'] # pygnmi strips first /
-                    path_x = path.replace('[','(').replace(']',')')
                     logging.info(f"Check gNMI change event :: {path}")
-                    for g in oper_groups:
-                      # TODO match on alias
-                      if g['monitor']['value'] == path:
+                    if path in monitor_map:
+                        g = monitor_map[path]
+                        if 'states' in g:
+                            g['states'][ path ] = p['val']
+                        else:
+                            g['states'] = { path: p['val'] }
+                        logging.info(f"Updated states :: {g['states']}")
+                        threshold = g['threshold'][10:]
                         targets = list(sre_yield.AllStrings(g['group']['value']))
-                        Update_OperGroup_State( g['name'], update['timestamp'],
-                            path + ' = ' + p['val'], targets )
-                        updates = []
-                        for d in targets:
-                            ps = d.split('/')
-                            root = '/'.join( ps[:-1] )
-                            leaf = ps[-1]
-                            val = {
-                              leaf: "enable" if p['val']=="up" else "disable",
-                              "description": f"Controlled by oper-group {g['name']}:{path_x}={p['val']}"
-                            }
-                            logging.info(f"SET gNMI data :: {root}={val}")
-                            updates.append( (root,val) )
 
-                        # Need a 2nd temporary gNMI session for the SET request?
-                        #with gNMIclient(target=(GNMI_SERVER,57400),
-                        #                        username="admin",password="admin",
-                        #                        insecure=True) as c2:
-                        try:
-                            c.set( encoding='json_ietf', update=updates )
-                        except Exception as rpc_e:
-                           logging.error(rpc_e)
-                           _o = rpc_e.__context__ # pygnmi wraps this
-                           # May happen during system startup, retry once
-                           if _o.code() == grpc.StatusCode.FAILED_PRECONDITION:
-                               logging.info("Exception during startup? Retry in 5s...")
-                               time.sleep( 5 )
+                        down = sum(s == "down" for s in g['states'].values())
+                        if threshold=="any":
+                            is_up = down == 0
+                        elif threshold=="all":
+                            is_up = down < len(g['states'])
+                        else:
+                            is_up = down < int(threshold)
+
+                        _ts = datetime.fromtimestamp(update['timestamp']/1000000000) # ns -> seconds
+                        _timestamp = _ts.strftime("%Y-%m-%d %H:%M:%S UTC")
+
+                        Update_OperGroup_State( g['name'], _timestamp,
+                          str(g['states']), targets, is_up )
+
+                        if 'is_up' not in g or is_up!=g['is_up']:
+                           g['is_up'] = is_up
+                           updates = []
+                           path_x = path.replace('[','(').replace(']',')')
+                           for d in targets:
+                               ps = d.split('/')
+                               root = '/'.join( ps[:-1] )
+                               leaf = ps[-1]
+                               val = {
+                                 leaf: "enable" if is_up else "disable",
+                                 "description": f"Controlled by oper-group {g['name']} last change at {_timestamp}"
+                               }
+                               logging.info(f"SET gNMI data :: {root}={val}")
+                               updates.append( (root,val) )
+
+                           try:
                                c.set( encoding='json_ietf', update=updates )
-                               logging.info("OK, success")
+                           except Exception as rpc_e:
+                              logging.error(rpc_e)
+                              _o = rpc_e.__context__ # pygnmi wraps this
+                              # May happen during system startup, retry once
+                              if _o.code() == grpc.StatusCode.FAILED_PRECONDITION:
+                                  logging.info("Exception during startup? Retry in 5s...")
+                                  time.sleep( 5 )
+                                  c.set( encoding='json_ietf', update=updates )
+                                  logging.info("OK, success")
 
         except Exception as e:
           traceback_str = ''.join(traceback.format_tb(e.__traceback__))
