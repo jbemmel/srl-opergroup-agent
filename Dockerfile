@@ -1,14 +1,7 @@
 ARG SR_LINUX_RELEASE
-FROM registry.srlinux.dev/pub/srlinux:$SR_LINUX_RELEASE
-
-RUN printf '%s\n' \
-  '#!/bin/bash' \
-  '' \
-  'mkdir -p /etc/opt/srlinux/appmgr && cp /home/appmgr/* /etc/opt/srlinux/appmgr/' \
-  'exit $?' \
-  \
-> /tmp/42.sh && sudo mv /tmp/42.sh /opt/srlinux/bin/bootscript/42_sr_copy_custom_appmgr.sh && \
-  sudo chmod a+x /opt/srlinux/bin/bootscript/42_sr_copy_custom_appmgr.sh
+FROM srl/custombase:$SR_LINUX_RELEASE
+# FROM ghcr.io/nokia/srlinux:$SR_LINUX_RELEASE
+# FROM registry.srlinux.dev/pub/srlinux:$SR_LINUX_RELEASE
 
 # admin user doesn't exist yet
 ARG SSH_KEY
@@ -26,9 +19,11 @@ RUN sudo yum install -y python3-pip gcc-c++ socat && \
 # RUN sudo sed -i 's|launch-command:  ./sr_sdk_mgr|launch-command:  /usr/sbin/ip netns exec srbase-mgmt ./sr_sdk_mgr|g' /opt/srlinux/appmgr/sr_sdk_mgr_config.yml
 
 # --chown=srlinux:srlinux
-# COPY ./appmgr/ /etc/opt/srlinux/appmgr/ # doesn't stick
-# Can also copy this to Containerlab /config volume that gets bind-mounted
-COPY ./appmgr/ /home/appmgr
+RUN sudo mkdir -p /etc/opt/srlinux/appmgr/
+COPY ./appmgr/ /etc/opt/srlinux/appmgr
+
+# COPY ./appmgr/ /home/appmgr
+# RUN sudo mkdir -p /etc/opt/srlinux/appmgr/ && sudo cp /home/appmgr/* /etc/opt/srlinux/appmgr/
 
 # Using a build arg to set the release tag, set a default for running docker build manually
 ARG SRL_AUTO_CONFIG_RELEASE="[custom build]"

@@ -153,18 +153,22 @@ def Handle_Notification(obj,groups):
     return False
 
 def Gnmi_subscribe_changes(oper_groups):
+    # Assumes group names are unique, could be enforced in YAML model
+    aliases = [ (path,f"#{g['name']}_{i}") for g in oper_groups
+                for (i,path) in enumerate(list(sre_yield.AllStrings(g['monitor']['value'])))  ]
     subscribe = {
             'subscription': [
                 {
-                    'path': g['monitor']['value'],
+                    'path': path,
                     'mode': 'on_change',
                 } for g in oper_groups
+                  for path in list(sre_yield.AllStrings(g['monitor']['value']))
             ],
-            'use_aliases': False, # Could send groupnames as aliases
+            'use_aliases': True,
             'mode': 'stream',
             'encoding': 'json'
         }
-    logging.info(f"gNMI subscribe :: {subscribe}")
+    logging.info(f"gNMI subscribe :: {subscribe} aliases={aliases}")
 
     # with Namespace('/var/run/netns/srbase-mgmt', 'net'):
     with gNMIclient(target=(GNMI_SERVER,57400),
@@ -172,7 +176,8 @@ def Gnmi_subscribe_changes(oper_groups):
     # with gNMIclient(target=('127.0.0.1',57400),
                             username="admin",password="admin",
                             insecure=True) as c:
-      telemetry_stream = c.subscribe(subscribe=subscribe) # OR aliases=[]
+      c.subscribe(aliases=aliases)
+      telemetry_stream = c.subscribe(subscribe=subscribe)
       for m in telemetry_stream:
         try:
           if m.HasField('update'): # both update and delete events
