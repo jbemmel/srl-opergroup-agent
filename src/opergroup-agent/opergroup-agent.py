@@ -200,7 +200,7 @@ def Gnmi_subscribe_changes(oper_groups):
                             g['states'] = { path: p['val'] }
                         logging.info(f"Updated states :: {g['states']}")
                         threshold = g['threshold'][10:]
-                        targets = list(sre_yield.AllStrings(g['group']['value']))
+                        targets = list(sre_yield.AllStrings(g['target_path']['value']))
 
                         down = sum(s == "down" for s in g['states'].values())
                         if threshold=="any":
@@ -216,6 +216,8 @@ def Gnmi_subscribe_changes(oper_groups):
                         Update_OperGroup_State( g['name'], _timestamp,
                           str(g['states']), targets, is_up )
 
+                        mappings = { k.lower():v for m in g['mapping']['value'].split(',') for k,v in m.split('=') }
+                        logging.info( f"Mappings: {mappings}" )
                         if 'is_up' not in g or is_up!=g['is_up']:
                            g['is_up'] = is_up
                            updates = []
@@ -225,7 +227,9 @@ def Gnmi_subscribe_changes(oper_groups):
                                root = '/'.join( ps[:-1] )
                                leaf = ps[-1]
                                val = {
-                                 leaf: "enable" if is_up else "disable",
+                                 leaf: (mappings['up'] if is_up and 'up' in mappings
+                                        else mappings['down'] if 'down' in mappings
+                                        else "disable"),
                                  "description": f"Controlled by oper-group {g['name']} last change at {_timestamp}"
                                }
                                logging.info(f"SET gNMI data :: {root}={val}")

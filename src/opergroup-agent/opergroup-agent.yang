@@ -57,9 +57,14 @@ module opergroup-agent {
                 description "gNMI target paths affected";
                 config false;
               }
-              leaf group {
+              leaf target-path {
                 type string;
                 description "gNMI path expression to apply the same changes";
+              }
+              leaf mapping {
+                type string;
+                description "List of input=output mapping values to apply";
+                default "up=enable,down=disable";
               }
               leaf threshold {
                 description "Trigger condition; default 'any' links down";

@@ -4,10 +4,8 @@ topology:
   kinds:
     srl:
       image: srl/opergroup-agent:latest
-      license: ../license.key
-      # Subdirectory of config -> clab must manage this
-      # binds:
-      # - appmgr:/etc/opt/srlinux/appmgr:ro
+      binds:
+      - ./src:/opt/demo-agents
 
   nodes:
     spine1:
