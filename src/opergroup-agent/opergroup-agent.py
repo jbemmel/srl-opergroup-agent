@@ -278,39 +278,24 @@ def Run():
             # TODO clear after every batch?
             # monitoring_groups = []
 
-    except grpc._channel._Rendezvous as err:
-        logging.info(f'GOING TO EXIT NOW: {err}')
-
-    except Exception as e:
-        logging.error(f'Exception caught :: {e}')
-        #if file_name != None:
-        #    Update_Result(file_name, action='delete')
-        try:
-            response = stub.AgentUnRegister(request=sdk_service_pb2.AgentRegistrationRequest(), metadata=metadata)
-            logging.error(f'Run try: Unregister response:: {response}')
-        except grpc._channel._Rendezvous as err:
-            logging.info(f'GOING TO EXIT NOW: {err}')
-            sys.exit()
-        return True
-    sys.exit()
+    finally:
+        Exit_Gracefully(0,0)
     return True
 ############################################################
 ## Gracefully handle SIGTERM signal
 ## When called, will unregister Agent and gracefully exit
 ############################################################
 def Exit_Gracefully(signum, frame):
-    logging.info("Caught signal :: {}\n will unregister bgp acl agent".format(signum))
+    logging.info( f"Caught signal :: {signum}\n will unregister opergroup agent" )
     try:
         response=stub.AgentUnRegister(request=sdk_service_pb2.AgentRegistrationRequest(), metadata=metadata)
-        logging.error('try: Unregister response:: {}'.format(response))
-        sys.exit()
-    except grpc._channel._Rendezvous as err:
-        logging.info('GOING TO EXIT NOW: {}'.format(err))
+        logging.info( f'Exit_Gracefully: AgentUnRegister response={response}' )
+    finally:
         sys.exit()
 
 ##################################################################################################
 ## Main from where the Agent starts
-## Log file is written to: /var/log/srlinux/stdout/bgp_acl_agent.log
+## Log file is written to: /var/log/srlinux/stdout/opergroup_agent.log
 ## Signals handled for graceful exit: SIGTERM
 ##################################################################################################
 if __name__ == '__main__':
@@ -324,8 +309,5 @@ if __name__ == '__main__':
                         datefmt='%H:%M:%S', level=logging.INFO)
     handler = RotatingFileHandler(log_filename, maxBytes=3000000,backupCount=5)
     logging.getLogger().addHandler(handler)
-    logging.info( f"Starting agent env={os.environ}" )
-    if Run():
-        logging.info('Agent unregistered')
-    else:
-        logging.info('Should not happen')
+    logging.info( f"Starting opergroup agent env={os.environ}" )
+    Run()
