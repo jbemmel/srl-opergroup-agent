@@ -18,13 +18,13 @@ RUN sudo yum install -y python3-pip gcc-c++ socat && \
 # This does not work; use socat forwarding instead
 # RUN sudo sed -i 's|launch-command:  ./sr_sdk_mgr|launch-command:  /usr/sbin/ip netns exec srbase-mgmt ./sr_sdk_mgr|g' /opt/srlinux/appmgr/sr_sdk_mgr_config.yml
 
-# --chown=srlinux:srlinux
-RUN sudo mkdir -p /etc/opt/srlinux/appmgr/
-COPY ./appmgr/ /etc/opt/srlinux/appmgr
+RUN sudo mkdir --mode 0755 -p /etc/opt/srlinux/appmgr/ /opt/demo-agents/
+COPY --chown=srlinux:srlinux ./opergroup-agent.yml /etc/opt/srlinux/appmgr
+COPY ./src /opt/demo-agents/
 
 # COPY ./appmgr/ /home/appmgr
 # RUN sudo mkdir -p /etc/opt/srlinux/appmgr/ && sudo cp /home/appmgr/* /etc/opt/srlinux/appmgr/
 
 # Using a build arg to set the release tag, set a default for running docker build manually
-ARG SRL_AUTO_CONFIG_RELEASE="[custom build]"
-ENV SRL_AUTO_CONFIG_RELEASE=$SRL_AUTO_CONFIG_RELEASE
+ARG SRL_OPERGROUP_AGENT_RELEASE="[custom build]"
+ENV SRL_OPERGROUP_AGENT_RELEASE=$SRL_OPERGROUP_AGENT_RELEASE

@@ -1,8 +1,8 @@
 # See example_config.yml for an explanation of all the accepted fields
 opergroup_agent:
-   path: /etc/opt/srlinux/appmgr/
-   launch-command: /etc/opt/srlinux/appmgr/opergroup-agent.sh
-   search-command: python3 /etc/opt/srlinux/appmgr/opergroup-agent.py
+   path: /opt/demo-agents/opergroup-agent/
+   launch-command: /opt/demo-agents/opergroup-agent/opergroup-agent.sh
+   search-command: python3 /opt/demo-agents/opergroup-agent/opergroup-agent.py
    wait-for-config: Yes
    failure-threshold: 100
    failure-action: wait=forever
@@ -12,4 +12,4 @@ opergroup_agent:
        names:
            - "opergroup-agent"
        source-directories:
-           - "/etc/opt/srlinux/appmgr/"
+           - "/opt/demo-agents/opergroup-agent/"
