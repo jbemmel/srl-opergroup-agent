@@ -198,11 +198,12 @@ def Gnmi_subscribe_changes(oper_groups):
                             g['states'][ path ] = p['val']
                         else:
                             g['states'] = { path: p['val'] }
-                        logging.info(f"Updated states :: {g['states']}")
+                        logging.info(f"Updated group :: {g}")
                         threshold = g['threshold'][10:]
                         targets = list(sre_yield.AllStrings(g['target_path']['value']))
-
                         down = sum(s == "down" for s in g['states'].values())
+                        logging.info( f"Threshold: {threshold} targets={targets} down={down}" )
+
                         if threshold=="any":
                             is_up = down == 0
                         elif threshold=="all":
