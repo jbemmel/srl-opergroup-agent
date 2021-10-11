@@ -4,6 +4,8 @@ topology:
   kinds:
     srl:
       image: srl/opergroup-agent:latest
+      extras:
+        srl-agents: [ ./opergroup-agent.yml ]
       binds:
       - ./src:/opt/demo-agents
 
@@ -11,6 +13,3 @@ topology:
     spine1:
       kind: srl
       startup-config: spine1.cfg
-      # Can make SDK Unix socket available on host, requires user with uid 1002
-      # binds:
-      # - /tmp/spine1:/opt/srlinux/var/run
