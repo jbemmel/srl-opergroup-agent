@@ -216,7 +216,7 @@ def Gnmi_subscribe_changes(oper_groups):
                         Update_OperGroup_State( g['name'], _timestamp,
                           str(g['states']), targets, is_up )
 
-                        mappings = { k.lower():v for m in g['mapping']['value'].split(',') for k,v in m.split('=') }
+                        mappings = { k.lower():v for m in g['mapping']['value'].split(',') for k,v in [m.split('=')] }
                         logging.info( f"Mappings: {mappings}" )
                         if 'is_up' not in g or is_up!=g['is_up']:
                            g['is_up'] = is_up
