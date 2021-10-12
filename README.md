@@ -81,6 +81,8 @@ show /interface ethernet-1/3
 
 
 ## Caveats and learnings
-Currently (SRL 21.6.2) no gNMI 'delete' events are generated for /bfd/network-instance[name=default]/peer[local-discriminator=*]/oper-state.
-This could cause the agent to retain stale state for BFD sessions that no longer exist, counting them as 'down'.
-To resolve this, the agent retrieves the updated state for all entries when triggered by an on-change event.
+Currently (SRL 21.6.2) no gNMI 'delete' events are generated for /bfd/network-instance[name=default]/peer[local-discriminator=*]/oper-state, and sessions that go down
+simply disappear after a while. This could cause the agent to retain stale state for BFD sessions that no longer exist, counting them as 'down'.
+To resolve this, the agent could retrieve the updated state for all entries when triggered by an on-change event - but this still does not 'remember' downed sessions.
+
+A stable trigger condition is the desired total count of BFD sessions
