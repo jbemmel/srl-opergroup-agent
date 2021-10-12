@@ -42,9 +42,14 @@ module opergroup-agent {
                 description "Current value of monitored operational gNMI state(s)";
                 config false;
               }
-              leaf group-is-up {
-                type boolean;
-                description "Combined group state as per threshold";
+              leaf group-state {
+                type string;
+                description "Resulting group state";
+                config false;
+              }
+              leaf based-on {
+                type string;
+                description "Condition that resulted in group state";
                 config false;
               }
               leaf last-change {
@@ -94,6 +99,7 @@ module opergroup-agent {
                   enum "2";
                   enum "3";
                   enum "4";
+                  enum "50%";
                 }
                 default any;
               }

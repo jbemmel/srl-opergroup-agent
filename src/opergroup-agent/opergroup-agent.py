@@ -107,14 +107,15 @@ def Add_Telemetry(js_path, js_data):
 ## Function to populate state fields of the agent
 ## It updates command: info from state auto-config-agent
 ############################################################
-def Update_OperGroup_State(groupname,timestamp,val,targets,is_up,down):
+def Update_OperGroup_State(groupname,timestamp,val,targets,group_state,based_on,down):
     js_path = '.' + agent_name + '.oper_group{.name=="' + groupname + '"}'
     value = { "current_states" : { "value": val },
               "last_change" : { "value": timestamp },
               "targets": { "value": ','.join(targets) },
               "target_count": len(targets),
               "down": down,
-              "group_is_up": is_up }
+              "group_state": group_state,
+              "based_on": based_on }
     response = Add_Telemetry( js_path=js_path, js_data=json.dumps(value) )
     logging.info(f"Telemetry_Update_Response :: {response}")
 
@@ -158,6 +159,10 @@ def Handle_Notification(obj,groups):
 
 def Gnmi_subscribe_changes(oper_groups):
     logging.info(f"Gnmi_subscribe_changes :: {oper_groups}")
+
+    # Expand targets for each group
+    for g in oper_groups.values():
+        g['targets'] = list(sre_yield.AllStrings(g['target_path']['value'],max_count=100))
 
     # Assumes group names are unique, could be enforced in YAML model
     # aliases = [ (path,f"#{g['name']}_{i}") for g in oper_groups
@@ -219,9 +224,10 @@ def Gnmi_subscribe_changes(oper_groups):
         #     timer = None
 
         try:
+          logging.info(f"gNMI event :: {m}")
           if m.HasField('update'): # both update and delete events
               parsed = telemetryParser(m)
-              logging.info(f"gNMI change event :: {parsed}")
+              logging.info(f"gNMI update event :: {parsed}")
               update = parsed['update']
               if update['update']:
                  for p in update['update']:
@@ -236,30 +242,30 @@ def Gnmi_subscribe_changes(oper_groups):
                         g['states'] = { path: p['val'] }
                     logging.info(f"Updated group :: {g}")
                     threshold = g['threshold'][10:]
-                    targets = list(sre_yield.AllStrings(g['target_path']['value'],max_count=100))
+                    targets = g['targets']
                     down = sum(s == "down" for s in g['states'].values())
                     logging.info( f"Threshold: {threshold} targets={targets} down={down}" )
-
-                    if threshold=="any":
-                        is_up = down == 0
-                    elif threshold=="all":
-                        is_up = down < len(g['states'])
-                    else:
-                        is_up = down < int(threshold)
-
-                    _ts = datetime.fromtimestamp(update['timestamp']/1000000000) # ns -> seconds
-                    _timestamp = _ts.strftime("%Y-%m-%d %H:%M:%S UTC")
-
-                    Update_OperGroup_State( g['name'], _timestamp, str(g['states']), targets, is_up, down )
 
                     mappings = { k.lower():v for m in g['mapping']['value'].split(',') for k,v in [m.split('=')] }
                     logging.info( f"Mappings: {mappings}" )
 
+                    # If 'expression' is given, use it instead of 'threshold'
                     expressions = {}
                     if 'expression' in g:
-                      expressions = { k.strip():v.strip().lower() for m in g['expression']['value'].split(',') for k,v in [m.split(':')] }
-                    default = g['default']['value'] if 'default' in g else 'enable'
-                    logging.info( f"Expressions: {expressions} default={default}" )
+                       expressions = { k.strip():v.strip().lower() for m in g['expression']['value'].split(',')
+                                                                   for k,v in [m.split(':')] }
+                       default = g['default']['value'] if 'default' in g else 'enable'
+                       logging.info( f"Expressions: {expressions} default={default}" )
+
+                    # Simple threshold-based calculation of 'is_up'
+                    if threshold=="any":
+                        is_up = down == 0
+                    elif threshold=="all":
+                        is_up = down < len(g['states'])
+                    elif threshold=="50%":
+                        is_up = down < len(g['states'])/2
+                    else:
+                        is_up = down < int(threshold)
 
                     def target_value():
                        if expressions!={}:
@@ -270,19 +276,26 @@ def Gnmi_subscribe_changes(oper_groups):
                                  is_true = eval( exp, _globals, _locals )
                                  logging.info( f"Custom value expression for '{v}': {exp}={is_true}")
                                  if is_true:
-                                     return v # str
+                                     return v, exp + str(_locals) # str
                               except Exception as e:
                                  logging.error( f"Custom value {exp} failed: {e}")
                        elif 'up' in mappings and is_up:
-                          return mappings['up']
+                          return mappings['up'], "mapping('up')"
                        elif 'down' in mappings and not is_up:
-                          return mappings['down']
+                          return mappings['down'], "mapping('down')"
 
                        logging.info( f"None of the expressions matched -> return default '{default}'" )
-                       return default
+                       return default, 'default'
 
-                    if 'is_up' not in g or is_up!=g['is_up']:
-                       g['is_up'] = is_up
+                    group_state, based_on = target_value()
+
+                    _ts = datetime.fromtimestamp(update['timestamp']/1000000000) # ns -> seconds
+                    _timestamp = _ts.strftime("%Y-%m-%d %H:%M:%S UTC")
+                    Update_OperGroup_State( g['name'], _timestamp, str(g['states']),
+                                            targets, group_state, based_on, down )
+
+                    if 'group_state' not in g or group_state!=g['group_state']:
+                       g['group_state'] = group_state
                        updates = []
                        path_x = path.replace('[','(').replace(']',')')
                        for d in targets:
@@ -290,8 +303,8 @@ def Gnmi_subscribe_changes(oper_groups):
                            root = '/'.join( ps[:-1] )
                            leaf = ps[-1]
                            val = {
-                             leaf: target_value(),
-                             "description": f"Controlled by oper-group {g['name']} last change at {_timestamp}"
+                             leaf: group_state,
+                             "description": f"Controlled by oper-group {g['name']} last change at {_timestamp} based on {based_on}"
                            }
                            logging.info(f"SET gNMI data :: {root}={val}")
                            updates.append( (root,val) )
