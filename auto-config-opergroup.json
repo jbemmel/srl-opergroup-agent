@@ -1,4 +1,24 @@
 { 
+  "opergroup_agent:opergroup-agent": {
+   "oper-group": [
+      {
+        "name": "Spine-Links",
+        "description": "Take down all access ports if any spine link goes down",
+        "monitor": "/interface\\[name=ethernet-1/[1-2]\\]/oper-state",
+        "target-path": "/interface\\[name=ethernet-1/[3-4]\\]/admin-state",
+        "mapping": "up=enable,down=disable",
+        "threshold": "any"
+      },
+      {
+        "name": "Expression example using BFD for multi-hop use cases",
+        "description": "Take down access ports if 2 or more multi-hop BFD sessions in default network-instance go down",
+        "monitor": "/bfd/network-instance\\[name=default\\]/peer\\[local-discriminator=*\\]/oper-state",
+        "target-path": "/interface\\[name=ethernet-1/[3-4]\\]/admin-state",
+        "expression": "down >= 2:disable",
+        "default": "enable"
+      }
+    ]
+  },
   "srl_nokia-acl:acl": {
     "cpm-filter": {
       "ipv4-filter": {
