@@ -41,6 +41,45 @@ Check that opergroup agent brought down the access ports:
 info /interface ethernet-1{3,4}
 ```
 
+# Demo scenario 2: BFD sessions
+
+On Spine1, show BFD enabled interfaces (OSPF on links and BGP EVPN on loopback):
+```
+info from state /bfd | filter subinterface
+```
+
+On Leaf1, currently all BFD sessions up:
+```
+info from state /bfd network-instance default | more
+```
+
+Bring down BFD on the Spine1 loopback:
+```
+enter candidate
+set /bfd subinterface lo0.0 admin-state disable
+commit stay
+```
+
+Check the agent state on leaf1:
+```
+info from state /opergroup-agent
+```
+
+Also bring down OSPF on Spine1, which ends the 2nd BFD session:
+```
+enter candidate
+set /network-instance default protocols ospf instance main admin-state disable
+commit stay
+```
+
+Check the agent state on leaf1 again:
+```
+info from state /opergroup-agent
+show /interface ethernet-1/3
+```
+
+
+
 ## Caveats and learnings
 Currently (SRL 21.6.2) no gNMI 'delete' events are generated for /bfd/network-instance[name=default]/peer[local-discriminator=*]/oper-state.
 This could cause the agent to retain stale state for BFD sessions that no longer exist, counting them as 'down'.
