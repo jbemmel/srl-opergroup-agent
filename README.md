@@ -39,6 +39,7 @@ Check that opergroup agent brought down the access ports:
 info /interface ethernet-1{3,4}
 ```
 
-## Issues
+## Caveats and learnings
 Currently (SRL 21.6.2) no gNMI 'delete' events are generated for /bfd/network-instance[name=default]/peer[local-discriminator=*]/oper-state.
-This causes the agent to retain stale state for BFD sessions that no longer exist, counting them as 'down'
+This could cause the agent to retain stale state for BFD sessions that no longer exist, counting them as 'down'.
+To resolve this, the agent retrieves the updated state for all entries when triggered by an on-change event.
