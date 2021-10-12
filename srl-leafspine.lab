@@ -11,7 +11,7 @@ topology:
       image: frr-with-lldp:latest # Custom built image with lldpad and daemons included
 
   nodes:
-    spine1: { kind: srl, startup-config: spine1.cfg 
+    spine1: { kind: srl, startup-config: spine1.cfg }
     spine2: { kind: srl, startup-config: spine1.cfg }
     leaf1:  { kind: srl, startup-config: spine1.cfg }
     leaf2:  { kind: srl, startup-config: spine1.cfg }
