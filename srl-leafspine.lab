@@ -7,7 +7,7 @@ topology:
       image: srl/auto-config-v2:latest
       startup-config: auto-config.json
       extras:
-        srl-agents: [ ./opergroup-agent.yml ]
+        srl-agents: [ ./opergroup-agent.yml, https://raw.githubusercontent.com/jbemmel/srl-self-organizing/main/auto-config-agent.yml ]
       binds:
       - src/opergroup-agent:/opt/demo-agents/opergroup-agent
 
