@@ -5,6 +5,7 @@ topology:
     srl:
       # image: srl/opergroup-agent:latest # not strictly need to build custom image, can bind-mount
       image: srl/auto-config-v2:latest
+      startup-config: auto-config.json
       extras:
         srl-agents: [ ./opergroup-agent.yml ]
       binds:
@@ -14,10 +15,10 @@ topology:
       image: frr-with-lldp:latest # Custom built image with lldpad and daemons included
 
   nodes:
-    spine1: { kind: srl, startup-config: auto-config.cfg }
-    spine2: { kind: srl, startup-config: auto-config.cfg }
-    leaf1:  { kind: srl, startup-config: auto-config.cfg }
-    leaf2:  { kind: srl, startup-config: auto-config.cfg }
+    spine1: { kind: srl }
+    spine2: { kind: srl }
+    leaf1:  { kind: srl }
+    leaf2:  { kind: srl }
 
     h1:
       kind: linux
