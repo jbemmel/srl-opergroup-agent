@@ -28,6 +28,10 @@ module opergroup-agent {
                 type string;
                 description "Unique name for this fate-sharing operational group";
               }
+              leaf description {
+                type string;
+                description "Description for this group, not processed";
+              }
               leaf monitor {
                 type string;
                 description "gNMI path to monitor for changes";
