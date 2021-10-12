@@ -3,18 +3,21 @@ name: opergroup-lab2
 topology:
   kinds:
     srl:
-      image: srl/opergroup-agent:latest
+      # image: srl/opergroup-agent:latest # not strictly need to build custom image, can bind-mount
+      image: srl/auto-config-v2:latest
       extras:
-        srl-agents: [ ./opergroup-agent.yml ] 
+        srl-agents: [ ./opergroup-agent.yml ]
+      binds:
+        src/opergroup-agent:/opt/demo-agents/opergroup-agent
 
     linux:
       image: frr-with-lldp:latest # Custom built image with lldpad and daemons included
 
   nodes:
-    spine1: { kind: srl, startup-config: spine1.cfg }
-    spine2: { kind: srl, startup-config: spine1.cfg }
-    leaf1:  { kind: srl, startup-config: spine1.cfg }
-    leaf2:  { kind: srl, startup-config: spine1.cfg }
+    spine1: { kind: srl, startup-config: auto-config.cfg }
+    spine2: { kind: srl, startup-config: auto-config.cfg }
+    leaf1:  { kind: srl, startup-config: auto-config.cfg }
+    leaf2:  { kind: srl, startup-config: auto-config.cfg }
 
     h1:
       kind: linux
