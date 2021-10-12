@@ -13,7 +13,8 @@ import signal
 import traceback
 import re
 import sre_yield
-from concurrent.futures import ThreadPoolExecutor
+# from concurrent.futures import ThreadPoolExecutor
+import threading
 
 if 'SRL_IS_INTERACTIVE' in os.environ: # running on SR Linux box?
    SDK_SERVER='unix:///opt/srlinux/var/run/sr_sdk_service_manager'
@@ -72,7 +73,7 @@ def Subscribe(stream_id, option):
         request = sdk_service_pb2.NotificationRegisterRequest(op=op, stream_id=stream_id, config=entry)
 
     subscription_response = stub.NotificationRegister(request=request, metadata=metadata)
-    print('Status of subscription response for {}:: {}'.format(option, subscription_response.status))
+    logging.info(f'Status of subscription response for {option}: {subscription_response.status}' )
 
 ############################################################
 ## Subscribe to all the events that Agent needs
@@ -139,13 +140,15 @@ def Handle_Notification(obj,groups):
                     oper_group = data['oper_group']
                     oper_group['name'] = obj.config.key.keys[0]
                     logging.info(f"Got operational group :: {oper_group}")
-                    groups.append( oper_group )
+                    groups[ obj.config.key.keys[0] ] = oper_group
 
                 return True
-        elif obj.config.key.js_path == ".commit.end" and groups!=[]:
+        elif obj.config.key.js_path == ".commit.end":
             logging.info(f"Got commit, starting monitoring thread: {groups}")
-            executor = ThreadPoolExecutor(max_workers=1)
-            executor.submit(Gnmi_subscribe_changes,groups)
+            if groups!={}:
+               threading.Thread(target=Gnmi_subscribe_changes, args=(groups,), daemon=True).start()
+            # executor = ThreadPoolExecutor(max_workers=1)
+            # executor.submit(Gnmi_subscribe_changes,groups)
             # Gnmi_subscribe_changes( groups )
     else:
         logging.info(f"Unexpected notification : {obj}")
@@ -158,7 +161,7 @@ def Gnmi_subscribe_changes(oper_groups):
     # Assumes group names are unique, could be enforced in YAML model
     # aliases = [ (path,f"#{g['name']}_{i}") for g in oper_groups
     #            for (i,path) in enumerate(list(sre_yield.AllStrings(g['monitor']['value'])))  ]
-    monitor_map = { path:g for g in oper_groups
+    monitor_map = { path:g for g in oper_groups.values()
                     for path in list(sre_yield.AllStrings(g['monitor']['value']))  }
     # Could expand g['targets'] = list(sre_yield.AllStrings(g['group']['value']))
     subscribe = {
@@ -298,13 +301,13 @@ def Run():
 
     stream_request = sdk_service_pb2.NotificationStreamRequest(stream_id=stream_id)
     stream_response = sub_stub.NotificationStream(stream_request, metadata=metadata)
-    monitoring_groups = []
+    monitoring_groups = {}
     try:
         for r in stream_response:
             logging.info(f"NOTIFICATION:: \n{r.notification}")
             for obj in r.notification:
                 Handle_Notification(obj,monitoring_groups)
-            # TODO clear after every batch?
+            # clear after every batch
             # monitoring_groups = []
 
     finally:
@@ -336,7 +339,7 @@ if __name__ == '__main__':
     logging.basicConfig(filename=log_filename, filemode='a',\
                         format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',\
                         datefmt='%H:%M:%S', level=logging.INFO)
-    handler = RotatingFileHandler(log_filename, maxBytes=3000000,backupCount=5)
+    handler = RotatingFileHandler(log_filename, maxBytes=1000000,backupCount=3)
     logging.getLogger().addHandler(handler)
     logging.info( f"Starting opergroup agent env={os.environ}" )
     Run()
