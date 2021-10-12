@@ -162,7 +162,7 @@ def Gnmi_subscribe_changes(oper_groups):
     # aliases = [ (path,f"#{g['name']}_{i}") for g in oper_groups
     #            for (i,path) in enumerate(list(sre_yield.AllStrings(g['monitor']['value'])))  ]
     monitor_map = { path:g for g in oper_groups.values()
-                    for path in list(sre_yield.AllStrings(g['monitor']['value']))  }
+                    for path in list(sre_yield.AllStrings(g['monitor']['value'],max_count=100))  }
     # Could expand g['targets'] = list(sre_yield.AllStrings(g['group']['value']))
     subscribe = {
             'subscription': [
@@ -203,7 +203,7 @@ def Gnmi_subscribe_changes(oper_groups):
                             g['states'] = { path: p['val'] }
                         logging.info(f"Updated group :: {g}")
                         threshold = g['threshold'][10:]
-                        targets = list(sre_yield.AllStrings(g['target_path']['value']))
+                        targets = list(sre_yield.AllStrings(g['target_path']['value'],max_count=100))
                         down = sum(s == "down" for s in g['states'].values())
                         logging.info( f"Threshold: {threshold} targets={targets} down={down}" )
 
