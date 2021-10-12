@@ -10,10 +10,18 @@
         "threshold": "any"
       },
       {
-        "name": "Expression example using BFD for multi-hop use cases",
-        "description": "Take down access ports if 2 or more multi-hop BFD sessions in default network-instance go down",
-        "monitor": "/bfd/network-instance\\[name=default\\]/peer\\[local-discriminator=\\*\\]/session-state",
+        "name": "Expression example using BFD to detect multi-hop issues",
+        "description": "Take down access ports if 2 or more (out of 4) multi-hop BFD sessions are down",
+        "monitor": "/bfd/total-bfd-sessions",
         "target-path": "/interface\\[name=ethernet-1/[3-4]\\]/admin-state",
+        "expression": "int(_) <= 2:disable",
+        "default": "enable"
+      },
+      {
+        "name": "This does *not* work",
+        "description": "Downed BFD sessions disappear after a while",
+        "monitor": "/bfd/network-instance\\[name=default\\]/peer\\[local-discriminator=\\*\\]/session-state",
+        "target-path": "/interface\\[name=ethernet-1/[5-6]\\]/admin-state",
         "expression": "down >= 2:disable",
         "default": "enable"
       }
