@@ -23,6 +23,7 @@ module opergroup-agent {
 
             list oper-group {
               key name;
+              ordered-by user;
 
               leaf name {
                 type string;
