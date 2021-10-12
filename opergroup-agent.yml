@@ -4,7 +4,7 @@ opergroup_agent:
    launch-command: /opt/demo-agents/opergroup-agent/opergroup-agent.sh
    search-command: python3 /opt/demo-agents/opergroup-agent/opergroup-agent.py
    wait-for-config: Yes
-   failure-threshold: 100
+   failure-threshold: 3
    failure-action: wait=forever
    author: 'Nokia'
    version-command: ' cat build_version'
