@@ -192,15 +192,32 @@ def Gnmi_subscribe_changes(oper_groups):
         logging.info( f"No match for path={_path}" )
         return None
 
-    # with Namespace('/var/run/netns/srbase-mgmt', 'net'):
+    # During system startup, wait 10s before subscribing
+    logging.info( "Wait 10s before subscribing..." )
+    time.sleep( 10 )
+
     with gNMIclient(target=(GNMI_SERVER,57400),
     # Need to run in mgmt namespace for this
     # with gNMIclient(target=('127.0.0.1',57400),
                             username="admin",password="admin",
                             insecure=True) as c:
       # c.subscribe(aliases=aliases) not supported?
+
+      # Handle deadlocked subscriptions? Doesn't work
+      #def reset_subscription(_c):
+      #    logging.info( "Reset gNMI connection..." )
+      #    _c.close()
+      #timer = threading.Timer( 10, reset_subscription, c )
+      #logging.info( "Starting 10s deadlock timer..." )
+      #timer.start()
+
       telemetry_stream = c.subscribe(subscribe=subscribe)
       for m in telemetry_stream:
+        # if timer:
+        #     logging.info( "Cancel deadlock timer" )
+        #     timer.cancel()
+        #     timer = None
+
         try:
           if m.HasField('update'): # both update and delete events
               parsed = telemetryParser(m)
