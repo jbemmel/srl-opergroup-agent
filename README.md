@@ -1,7 +1,7 @@
 # srl-opergroup-agent
 SR Linux agent to implement operational groups where target elements are administratively disabled if a monitored link or session goes down
 
-![plot](images/Oper-group agent.png)
+![plot](images/Oper-group-agent.png)
 
 # Use case: uplink monitoring
 
