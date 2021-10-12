@@ -214,11 +214,37 @@ def Gnmi_subscribe_changes(oper_groups):
                         _ts = datetime.fromtimestamp(update['timestamp']/1000000000) # ns -> seconds
                         _timestamp = _ts.strftime("%Y-%m-%d %H:%M:%S UTC")
 
-                        Update_OperGroup_State( g['name'], _timestamp,
-                          str(g['states']), targets, is_up )
+                        Update_OperGroup_State( g['name'], _timestamp, str(g['states']), targets, is_up )
 
                         mappings = { k.lower():v for m in g['mapping']['value'].split(',') for k,v in [m.split('=')] }
                         logging.info( f"Mappings: {mappings}" )
+
+                        expressions = {}
+                        if 'expression' in g:
+                          expressions = { k.strip():v.strip().lower() for m in g['expression']['value'].split(',') for k,v in [m.split('=')] }
+                        default = g['default']['value'] if 'default' in g else 'enable'
+                        logging.info( f"Expressions: {expressions} default={default}" )
+
+                        def target_value():
+                           if expressions!={}:
+                              _globals = {}
+                              _locals = { 'path': path, '_': p['val'], 'is_up': is_up, 'count': len(g['states']), 'down': down }
+                              for exp, v in expressions.items():
+                                  try:
+                                     is_true = eval( exp, _globals, _locals )
+                                     logging.info( f"Custom value expression for '{v}': {exp}={is_true}")
+                                     if is_true:
+                                         return v # str
+                                  except Exception as e:
+                                     logging.error( f"Custom value {exp} failed: {e}")
+                           elif 'up' in mappings and is_up:
+                              return mappings['up']
+                           elif 'down' in mappings and not is_up:
+                              return mappings['down']
+
+                           logging.info( f"None of the expressions matched -> return default '{default}'" )
+                           return default
+
                         if 'is_up' not in g or is_up!=g['is_up']:
                            g['is_up'] = is_up
                            updates = []
@@ -228,9 +254,7 @@ def Gnmi_subscribe_changes(oper_groups):
                                root = '/'.join( ps[:-1] )
                                leaf = ps[-1]
                                val = {
-                                 leaf: (mappings['up'] if is_up and 'up' in mappings
-                                        else mappings['down'] if 'down' in mappings
-                                        else "disable"),
+                                 leaf: target_value(),
                                  "description": f"Controlled by oper-group {g['name']} last change at {_timestamp}"
                                }
                                logging.info(f"SET gNMI data :: {root}={val}")

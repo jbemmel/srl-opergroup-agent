@@ -70,6 +70,15 @@ module opergroup-agent {
                 description "List of input=output mapping values to apply";
                 default "up=enable,down=disable";
               }
+              leaf expression {
+                type string;
+                description "Optional list of expression=<target state> values, for example int(_)<2:disable,True:enable";
+              }
+              leaf default {
+                type string;
+                description "Default state to use if none of the expressions match, default 'enable'";
+                default "enable";
+              }
               leaf threshold {
                 description "Trigger condition; default 'any' links down";
                 type enumeration {
