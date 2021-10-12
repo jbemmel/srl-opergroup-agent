@@ -57,6 +57,11 @@ module opergroup-agent {
                 description "Number of affected objects (e.g. links)";
                 config false;
               }
+              leaf down {
+                type uint16;
+                description "Number of monitored objects that are not up";
+                config false;
+              }
               leaf targets {  // tried leaf-list, hard to populate
                 type string;
                 description "gNMI target paths affected";

@@ -107,12 +107,13 @@ def Add_Telemetry(js_path, js_data):
 ## Function to populate state fields of the agent
 ## It updates command: info from state auto-config-agent
 ############################################################
-def Update_OperGroup_State(groupname,timestamp,val,targets,is_up):
+def Update_OperGroup_State(groupname,timestamp,val,targets,is_up,down):
     js_path = '.' + agent_name + '.oper_group{.name=="' + groupname + '"}'
     value = { "current_states" : { "value": val },
               "last_change" : { "value": timestamp },
               "targets": { "value": ','.join(targets) },
               "target_count": len(targets),
+              "down": down,
               "group_is_up": is_up }
     response = Add_Telemetry( js_path=js_path, js_data=json.dumps(value) )
     logging.info(f"Telemetry_Update_Response :: {response}")
@@ -163,7 +164,6 @@ def Gnmi_subscribe_changes(oper_groups):
     #            for (i,path) in enumerate(list(sre_yield.AllStrings(g['monitor']['value'])))  ]
     monitor_map = { path:g for g in oper_groups.values()
                     for path in list(sre_yield.AllStrings(g['monitor']['value'],max_count=100))  }
-    # Could expand g['targets'] = list(sre_yield.AllStrings(g['group']['value']))
     subscribe = {
             'subscription': [
                 {
@@ -176,6 +176,21 @@ def Gnmi_subscribe_changes(oper_groups):
             'encoding': 'json'
         }
     logging.info(f"gNMI subscribe :: {subscribe}")
+
+    # Build map of regex expressions for paths containing '*'
+    regex_map = { path.replace('\\*',".*"):g for g in oper_groups.values()
+                  for path in [ g['monitor']['value'] ] if '\\*' in path  }
+    logging.info( f"regex_map: {regex_map}" )
+    def find_group(_path):
+        if _path in monitor_map:
+            return monitor_map[_path]
+        for r,g in regex_map.items():
+            if re.match( r, _path ):
+                return g
+            else:
+                logging.info( f"No regex match: {r}!~{_path}" )
+        logging.info( f"No match for path={_path}" )
+        return None
 
     # with Namespace('/var/run/netns/srbase-mgmt', 'net'):
     with gNMIclient(target=(GNMI_SERVER,57400),
@@ -194,86 +209,87 @@ def Gnmi_subscribe_changes(oper_groups):
               if update['update']:
                  for p in update['update']:
                     path = '/' + p['path'] # pygnmi strips first /
-                    logging.info(f"Check gNMI change event :: {path}")
-                    if path in monitor_map:
-                        g = monitor_map[path]
-                        if 'states' in g:
-                            g['states'][ path ] = p['val']
-                        else:
-                            g['states'] = { path: p['val'] }
-                        logging.info(f"Updated group :: {g}")
-                        threshold = g['threshold'][10:]
-                        targets = list(sre_yield.AllStrings(g['target_path']['value'],max_count=100))
-                        down = sum(s == "down" for s in g['states'].values())
-                        logging.info( f"Threshold: {threshold} targets={targets} down={down}" )
+                    logging.info(f"Check gNMI change event :: {path} in {monitor_map}")
+                    g = find_group( path )
+                    if not g:
+                        continue
+                    if 'states' in g:
+                        g['states'][ path ] = p['val']
+                    else:
+                        g['states'] = { path: p['val'] }
+                    logging.info(f"Updated group :: {g}")
+                    threshold = g['threshold'][10:]
+                    targets = list(sre_yield.AllStrings(g['target_path']['value'],max_count=100))
+                    down = sum(s == "down" for s in g['states'].values())
+                    logging.info( f"Threshold: {threshold} targets={targets} down={down}" )
 
-                        if threshold=="any":
-                            is_up = down == 0
-                        elif threshold=="all":
-                            is_up = down < len(g['states'])
-                        else:
-                            is_up = down < int(threshold)
+                    if threshold=="any":
+                        is_up = down == 0
+                    elif threshold=="all":
+                        is_up = down < len(g['states'])
+                    else:
+                        is_up = down < int(threshold)
 
-                        _ts = datetime.fromtimestamp(update['timestamp']/1000000000) # ns -> seconds
-                        _timestamp = _ts.strftime("%Y-%m-%d %H:%M:%S UTC")
+                    _ts = datetime.fromtimestamp(update['timestamp']/1000000000) # ns -> seconds
+                    _timestamp = _ts.strftime("%Y-%m-%d %H:%M:%S UTC")
 
-                        Update_OperGroup_State( g['name'], _timestamp, str(g['states']), targets, is_up )
+                    Update_OperGroup_State( g['name'], _timestamp, str(g['states']), targets, is_up, down )
 
-                        mappings = { k.lower():v for m in g['mapping']['value'].split(',') for k,v in [m.split('=')] }
-                        logging.info( f"Mappings: {mappings}" )
+                    mappings = { k.lower():v for m in g['mapping']['value'].split(',') for k,v in [m.split('=')] }
+                    logging.info( f"Mappings: {mappings}" )
 
-                        expressions = {}
-                        if 'expression' in g:
-                          expressions = { k.strip():v.strip().lower() for m in g['expression']['value'].split(',') for k,v in [m.split('=')] }
-                        default = g['default']['value'] if 'default' in g else 'enable'
-                        logging.info( f"Expressions: {expressions} default={default}" )
+                    expressions = {}
+                    if 'expression' in g:
+                      expressions = { k.strip():v.strip().lower() for m in g['expression']['value'].split(',') for k,v in [m.split(':')] }
+                    default = g['default']['value'] if 'default' in g else 'enable'
+                    logging.info( f"Expressions: {expressions} default={default}" )
 
-                        def target_value():
-                           if expressions!={}:
-                              _globals = {}
-                              _locals = { 'path': path, '_': p['val'], 'is_up': is_up, 'count': len(g['states']), 'down': down }
-                              for exp, v in expressions.items():
-                                  try:
-                                     is_true = eval( exp, _globals, _locals )
-                                     logging.info( f"Custom value expression for '{v}': {exp}={is_true}")
-                                     if is_true:
-                                         return v # str
-                                  except Exception as e:
-                                     logging.error( f"Custom value {exp} failed: {e}")
-                           elif 'up' in mappings and is_up:
-                              return mappings['up']
-                           elif 'down' in mappings and not is_up:
-                              return mappings['down']
+                    def target_value():
+                       if expressions!={}:
+                          _globals = {}
+                          _locals = { 'path': path, '_': p['val'], 'is_up': is_up, 'count': len(g['states']), 'down': down }
+                          for exp, v in expressions.items():
+                              try:
+                                 is_true = eval( exp, _globals, _locals )
+                                 logging.info( f"Custom value expression for '{v}': {exp}={is_true}")
+                                 if is_true:
+                                     return v # str
+                              except Exception as e:
+                                 logging.error( f"Custom value {exp} failed: {e}")
+                       elif 'up' in mappings and is_up:
+                          return mappings['up']
+                       elif 'down' in mappings and not is_up:
+                          return mappings['down']
 
-                           logging.info( f"None of the expressions matched -> return default '{default}'" )
-                           return default
+                       logging.info( f"None of the expressions matched -> return default '{default}'" )
+                       return default
 
-                        if 'is_up' not in g or is_up!=g['is_up']:
-                           g['is_up'] = is_up
-                           updates = []
-                           path_x = path.replace('[','(').replace(']',')')
-                           for d in targets:
-                               ps = d.split('/')
-                               root = '/'.join( ps[:-1] )
-                               leaf = ps[-1]
-                               val = {
-                                 leaf: target_value(),
-                                 "description": f"Controlled by oper-group {g['name']} last change at {_timestamp}"
-                               }
-                               logging.info(f"SET gNMI data :: {root}={val}")
-                               updates.append( (root,val) )
+                    if 'is_up' not in g or is_up!=g['is_up']:
+                       g['is_up'] = is_up
+                       updates = []
+                       path_x = path.replace('[','(').replace(']',')')
+                       for d in targets:
+                           ps = d.split('/')
+                           root = '/'.join( ps[:-1] )
+                           leaf = ps[-1]
+                           val = {
+                             leaf: target_value(),
+                             "description": f"Controlled by oper-group {g['name']} last change at {_timestamp}"
+                           }
+                           logging.info(f"SET gNMI data :: {root}={val}")
+                           updates.append( (root,val) )
 
-                           try:
-                               c.set( encoding='json_ietf', update=updates )
-                           except Exception as rpc_e:
-                              logging.error(rpc_e)
-                              _o = rpc_e.__context__ # pygnmi wraps this
-                              # May happen during system startup, retry once
-                              if _o.code() == grpc.StatusCode.FAILED_PRECONDITION:
-                                  logging.info("Exception during startup? Retry in 5s...")
-                                  time.sleep( 5 )
-                                  c.set( encoding='json_ietf', update=updates )
-                                  logging.info("OK, success")
+                       try:
+                          c.set( encoding='json_ietf', update=updates )
+                       except Exception as rpc_e:
+                          logging.error(rpc_e)
+                          _o = rpc_e.__context__ # pygnmi wraps this
+                          # May happen during system startup, retry once
+                          if _o.code() == grpc.StatusCode.FAILED_PRECONDITION:
+                              logging.info("Exception during startup? Retry in 5s...")
+                              time.sleep( 5 )
+                              c.set( encoding='json_ietf', update=updates )
+                              logging.info("OK, success")
 
         except Exception as e:
           traceback_str = ''.join(traceback.format_tb(e.__traceback__))
