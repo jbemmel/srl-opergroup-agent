@@ -8,7 +8,7 @@ topology:
       extras:
         srl-agents: [ ./opergroup-agent.yml ]
       binds:
-        src/opergroup-agent:/opt/demo-agents/opergroup-agent
+      - src/opergroup-agent:/opt/demo-agents/opergroup-agent
 
     linux:
       image: frr-with-lldp:latest # Custom built image with lldpad and daemons included
