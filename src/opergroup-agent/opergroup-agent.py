@@ -242,17 +242,26 @@ def Gnmi_subscribe_changes(oper_groups):
                     # XXX this replication of state leads to stale entries
                     if 'states' in g:
                         # Instead of doing this, refresh all state through GET
-                        g['states'][ path ] = p['val']
+                        # g['states'][ path ] = p['val']
 
                         state = c.get( path=g['sources'], encoding='json_ietf')
-                        logging.info( f"Fresh state: {state}" )
-
+                        logging.info( f"Fresh state({g['sources']}): {state}" )
+                        if len(g['sources'])==1:
+                            _p = g['sources'][0]
+                            kv = re.match( '^(?:/[a-z-\[\]=]+)+/([a-z-]+)\[([a-z-]+)=\*\]/([a-z-]+)$', _p )
+                            logging.info( f"{kv} groups={kv.groups()}")
+                            _st = state['notification'][0]['update'][0]['val']
+                            leaf, key, attr = kv.groups()
+                            g['states'] = { f'{key}={v[key]}' : v[attr] for v in _st[leaf] }
+                        else:
+                            g['states'] = { p: state['notification'][i]['update'][0]['val']
+                                            for i,p in enumerate(g['sources']) }
                     else:
                         g['states'] = { path: p['val'] }
                     logging.info(f"Updated group :: {g}")
                     threshold = g['threshold'][10:]
                     targets = g['targets']
-                    down = sum(s == "down" for s in g['states'].values())
+                    down = sum(s.lower() != "up" for s in g['states'].values())
                     logging.info( f"Threshold: {threshold} targets={targets} down={down}" )
 
                     mappings = { k.lower():v for m in g['mapping']['value'].split(',') for k,v in [m.split('=')] }
