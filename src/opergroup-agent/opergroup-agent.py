@@ -160,15 +160,16 @@ def Handle_Notification(obj,groups):
 def Gnmi_subscribe_changes(oper_groups):
     logging.info(f"Gnmi_subscribe_changes :: {oper_groups}")
 
-    # Expand targets for each group
+    # Expand targets and sources for each group
     for g in oper_groups.values():
         g['targets'] = list(sre_yield.AllStrings(g['target_path']['value'],max_count=100))
+        g['sources'] = list(sre_yield.AllStrings(g['monitor']['value'],max_count=100))
 
     # Assumes group names are unique, could be enforced in YAML model
     # aliases = [ (path,f"#{g['name']}_{i}") for g in oper_groups
     #            for (i,path) in enumerate(list(sre_yield.AllStrings(g['monitor']['value'])))  ]
     monitor_map = { path:g for g in oper_groups.values()
-                    for path in list(sre_yield.AllStrings(g['monitor']['value'],max_count=100))  }
+                           for path in g['sources']  }
     subscribe = {
             'subscription': [
                 {
@@ -224,7 +225,7 @@ def Gnmi_subscribe_changes(oper_groups):
         #     timer = None
 
         try:
-          logging.info(f"gNMI event :: {m}")
+          # logging.info(f"gNMI event :: {m}")
           if m.HasField('update'): # both update and delete events
               parsed = telemetryParser(m)
               logging.info(f"gNMI update event :: {parsed}")
@@ -236,8 +237,16 @@ def Gnmi_subscribe_changes(oper_groups):
                     g = find_group( path )
                     if not g:
                         continue
+
+                    # No 'delete' events received for bfd session state, may simply disappear after 'down'
+                    # XXX this replication of state leads to stale entries
                     if 'states' in g:
+                        # Instead of doing this, refresh all state through GET
                         g['states'][ path ] = p['val']
+
+                        state = c.get( path=g['sources'], encoding='json_ietf')
+                        logging.info( f"Fresh state: {state}" )
+
                     else:
                         g['states'] = { path: p['val'] }
                     logging.info(f"Updated group :: {g}")
@@ -269,8 +278,8 @@ def Gnmi_subscribe_changes(oper_groups):
 
                     def target_value():
                        if expressions!={}:
-                          _globals = {}
-                          _locals = { 'path': path, '_': p['val'], 'is_up': is_up, 'count': len(g['states']), 'down': down }
+                          _globals = { 'path': path, }
+                          _locals = { '_': p['val'], 'is_up': is_up, 'count': len(g['states']), 'down': down, 'targets': len(targets) }
                           for exp, v in expressions.items():
                               try:
                                  is_true = eval( exp, _globals, _locals )
@@ -304,7 +313,7 @@ def Gnmi_subscribe_changes(oper_groups):
                            leaf = ps[-1]
                            val = {
                              leaf: group_state,
-                             "description": f"Controlled by oper-group {g['name']} last change at {_timestamp} based on {based_on}"
+                             "description": f"Controlled by oper-group '{g['name']}' last change at {_timestamp} based on {based_on}"[:255]
                            }
                            logging.info(f"SET gNMI data :: {root}={val}")
                            updates.append( (root,val) )
