@@ -251,9 +251,12 @@ def Gnmi_subscribe_changes(oper_groups):
                         if 'get' in g:
                            state = c.get( path=g['sources'], encoding='json_ietf')
                            logging.info( f"Fresh state({g['sources']}): {state}" )
-                           _st = state['notification'][0]['update'][0]['val']
-                           leaf, key, attr = g['get'] # Calculated above
-                           g['states'] = { f'{key}={v[key]}' : v[attr] for v in _st[leaf] }
+                           if 'update' in state['notification'][0]:
+                             _st = state['notification'][0]['update'][0]['val']
+                             leaf, key, attr = g['get'] # Calculated above
+                             g['states'] = { f'{key}={v[key]}' : v[attr] for v in _st[leaf] }
+                           else:
+                             g['states'][ path ] = p['val']
 
                            # For multiple sources:
                            # g['states'] = { p: state['notification'][i]['update'][0]['val']
