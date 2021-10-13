@@ -18,7 +18,7 @@
         "default": "enable"
       },
       {
-        "name": "This does *not* work",
+        "name": "This does ~not~ work, downed BFD sessions disappear",
         "description": "Downed BFD sessions disappear after a while",
         "monitor": "/bfd/network-instance\\[name=default\\]/peer\\[local-discriminator=\\*\\]/session-state",
         "target-path": "/interface\\[name=ethernet-1/[5-6]\\]/admin-state",
@@ -1182,7 +1182,7 @@
     "srl_nokia-gnmi-server:gnmi-server": {
       "admin-state": "enable",
       "timeout": 7200,
-      "rate-limit": 60,
+      "rate-limit": 300,
       "session-limit": 20,
       "network-instance": [
         {

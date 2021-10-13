@@ -165,6 +165,12 @@ def Gnmi_subscribe_changes(oper_groups):
         g['targets'] = list(sre_yield.AllStrings(g['target_path']['value'],max_count=100))
         g['sources'] = list(sre_yield.AllStrings(g['monitor']['value'],max_count=100))
 
+        # For volatile sources like BFD session state
+        if len(g['sources'])==1:
+            kv = re.match( '^(?:/[a-z-\[\]=]+)+/([a-z-]+)\[([a-z-]+)=\*\]/([a-z-]+)$', g['sources'][0] )
+            if kv:
+                g['get'] = kv.groups() # leaf, key, attr
+
     # Assumes group names are unique, could be enforced in YAML model
     # aliases = [ (path,f"#{g['name']}_{i}") for g in oper_groups
     #            for (i,path) in enumerate(list(sre_yield.AllStrings(g['monitor']['value'])))  ]
@@ -241,21 +247,21 @@ def Gnmi_subscribe_changes(oper_groups):
                     # No 'delete' events received for bfd session state, may simply disappear after 'down'
                     # XXX this replication of state leads to stale entries
                     if 'states' in g:
-                        # Instead of doing this, refresh all state through GET
-                        # g['states'][ path ] = p['val']
+                        # Some volatile state must be refreshed through GET
+                        if 'get' in g:
+                           state = c.get( path=g['sources'], encoding='json_ietf')
+                           logging.info( f"Fresh state({g['sources']}): {state}" )
+                           _st = state['notification'][0]['update'][0]['val']
+                           leaf, key, attr = g['get'] # Calculated above
+                           g['states'] = { f'{key}={v[key]}' : v[attr] for v in _st[leaf] }
 
-                        state = c.get( path=g['sources'], encoding='json_ietf')
-                        logging.info( f"Fresh state({g['sources']}): {state}" )
-                        if len(g['sources'])==1:
-                            _p = g['sources'][0]
-                            kv = re.match( '^(?:/[a-z-\[\]=]+)+/([a-z-]+)\[([a-z-]+)=\*\]/([a-z-]+)$', _p )
-                            logging.info( f"{kv} groups={kv.groups()}")
-                            _st = state['notification'][0]['update'][0]['val']
-                            leaf, key, attr = kv.groups()
-                            g['states'] = { f'{key}={v[key]}' : v[attr] for v in _st[leaf] }
+                           # For multiple sources:
+                           # g['states'] = { p: state['notification'][i]['update'][0]['val']
+                           #                 for i,p in enumerate(g['sources']) }
+
                         else:
-                            g['states'] = { p: state['notification'][i]['update'][0]['val']
-                                            for i,p in enumerate(g['sources']) }
+                           g['states'][ path ] = p['val']
+
                     else:
                         g['states'] = { path: p['val'] }
                     logging.info(f"Updated group :: {g}")
@@ -294,7 +300,7 @@ def Gnmi_subscribe_changes(oper_groups):
                                  is_true = eval( exp, _globals, _locals )
                                  logging.info( f"Custom value expression for '{v}': {exp}={is_true}")
                                  if is_true:
-                                     return v, exp + str(_locals) # str
+                                     return v, exp.replace('_',p['val']) # + str(_locals) # str, _locals does not render as 'description'
                               except Exception as e:
                                  logging.error( f"Custom value {exp} failed: {e}")
                        elif 'up' in mappings and is_up:
@@ -316,13 +322,23 @@ def Gnmi_subscribe_changes(oper_groups):
                        g['group_state'] = group_state
                        updates = []
                        path_x = path.replace('[','(').replace(']',')')
+
+                       # Turns e into an expression allowed as description
+                       # Allowed pattern '[A-Za-z0-9 !@#$%^&()|+=`~.,'/_:;?-]*'
+                       def sanitize(e):
+                           e = e.replace('>=',' ge ')
+                           e = e.replace('<=',' le ')
+                           e = e.replace('>',' gt ')
+                           e = e.replace('<',' lt ')
+                           return e
+
                        for d in targets:
                            ps = d.split('/')
                            root = '/'.join( ps[:-1] )
                            leaf = ps[-1]
                            val = {
                              leaf: group_state,
-                             "description": f"Controlled by oper-group '{g['name']}' last change at {_timestamp} based on {based_on}"[:255]
+                             "description": f"Controlled by oper-group '{g['name']}' last change at {_timestamp} based on {sanitize(based_on)}"[:255]
                            }
                            logging.info(f"SET gNMI data :: {root}={val}")
                            updates.append( (root,val) )
