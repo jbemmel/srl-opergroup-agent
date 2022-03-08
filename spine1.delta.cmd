@@ -1,0 +1,13 @@
+/opergroup-agent oper-group "Spine-Links"
+description "Take down all access ports if any spine link goes down"
+monitor "/interface\\[name=ethernet-1/[1-2]\\]/oper-state"
+target-path "/interface\\[name=ethernet-1/[3-4]\\]/admin-state"
+mapping "up=enable,down=disable"
+threshold "any"
+
+/opergroup-agent oper-group "Multi-hop example using BFD"
+description "Take down access ports if 2 or more multi-hop BFD sessions in default network-instance go down"
+monitor "/bfd/network-instance\\[name=default\\]/peer\\[local-discriminator=*\\]/oper-state"
+target-path "/interface\\[name=ethernet-1/[3-4]\\]/admin-state"
+expression "down >= 2:disable"
+default "enable"
