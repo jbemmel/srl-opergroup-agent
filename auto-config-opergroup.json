@@ -1167,7 +1167,8 @@
       },
       "server-group": [
         {
-          "name": "local"
+          "name": "local",
+          "type": "local"
         }
       ]
     },
@@ -1383,8 +1384,10 @@
   ],
   "auto_config_agent:auto-config-agent": {
     "igp": "ospf",
-    "evpn": "symmetric-irb",
-    "evpn-rr": "spine",
+    "evpn": {
+      "model": "symmetric-irb",
+      "route-reflector": "spine"
+    },
     "peerlinks": {
         "prefix": "192.168.127.0/24",
         "host-subnet-size": 30
