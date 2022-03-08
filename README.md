@@ -38,7 +38,7 @@ commit stay
 
 Check that opergroup agent brought down the access ports:
 ```
-info /interface ethernet-1{3,4}
+info /interface ethernet-1/{3,4}
 ```
 
 # Demo scenario 2: BFD sessions
